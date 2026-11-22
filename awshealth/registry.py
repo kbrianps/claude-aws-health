@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import pkgutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -29,6 +30,10 @@ class Call:
             raise ValueError(f"{self.service}:{self.operation} must declare a keep projection")
 
     @property
+    def kwargs(self) -> dict[str, Any]:
+        return {k: json.loads(v) for k, v in self.params}
+
+    @property
     def key(self) -> str:
         suffix = "" if not self.params else "?" + "&".join(f"{k}={v}" for k, v in self.params)
         return f"{self.service}:{self.operation}{suffix}"
@@ -36,7 +41,8 @@ class Call:
 
 def call(service: str, operation: str, keep: str, *, params: dict[str, Any] | None = None, result_key: str = "",
          scope: str = "regional", paginate: bool = True, per_item: tuple[str, str, str, str] | None = None) -> Call:
-    return Call(service, operation, tuple(sorted((params or {}).items())), keep, result_key, scope, paginate, per_item)
+    frozen = tuple(sorted((k, json.dumps(v, sort_keys=True)) for k, v in (params or {}).items()))
+    return Call(service, operation, frozen, keep, result_key, scope, paginate, per_item)
 
 
 @dataclass
