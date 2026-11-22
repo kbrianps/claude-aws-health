@@ -1,9 +1,9 @@
 {
-  "description": "aws-health guard: blocks credential, state and secret reads in every session, and limits the aws CLI to strict or deep read-only mode",
+  "description": "aws-health guard, opt-in: does nothing unless Claude Code starts with AWSHEALTH_GUARD set. When set, it blocks credential, state and secret reads, environment dumps and network tools, and limits the aws CLI to strict or deep read-only mode",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Monitor|Read|Grep|Glob|NotebookRead|WebFetch",
+        "matcher": "Bash|Monitor|Read|Grep|Glob|NotebookRead|WebFetch|Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
