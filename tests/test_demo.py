@@ -71,13 +71,51 @@ def test_injection_tag_renders_as_text(demo):
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
 
 
-def test_adjustments_are_applied(demo):
+def adjustments(out):
+    return [json.loads(line) for line in (out / "adjustments.jsonl").read_text().splitlines() if line.strip()]
+
+
+def test_adjustments_follow_the_skeptic_protocol(demo):
+    adj = adjustments(demo)
+    assert sorted(a["verdict"] for a in adj) == ["confirmed", "downgraded", "killed", "question"]
+    assert all(e.startswith("snapshot:") for a in adj for e in a.get("evidence", []))
+    [question] = [a for a in adj if a["verdict"] == "question"]
+    assert question["question"]["en"] and question["question"]["pt-BR"]
     run = load_run(demo)
-    assert [k.finding.check_id for k in run.killed] == ["ec2-stopped-long"]
+    assert [k.finding.check_id for k in run.killed] == ["sg-open-admin-ports"]
     statuses = {f.check_id: f.status for f in run.findings if f.status != "open"}
-    assert statuses == {"backup-plan-selects-nothing": "confirmed", "logs-no-retention": "question"}
-    webhook = next(f for f in run.findings if f.check_id == "lambda-url-public-no-auth")
-    assert webhook.severity == "medium"
+    assert statuses == {"backup-plan-selects-nothing": "confirmed", "ec2-stopped-long": "question"}
+    regions = next(f for f in run.findings if f.check_id == "unused-regions-open")
+    assert regions.severity == "medium"
+
+
+def test_the_kill_is_proven_by_the_snapshot_itself(demo):
+    [kill] = [a for a in adjustments(demo) if a["verdict"] == "killed"]
+    [sg] = [f for f in findings(demo) if f["uid"] == kill["uid"]]
+    group = sg["resource"].split("/")[-1]
+    data = json.loads((demo / "snapshot.json").read_text())["data"]
+    enis = [e for e in data["ec2:DescribeNetworkInterfaces"]["us-east-1"]["value"] if group in (e["groups"] or [])]
+    assert enis and all(e["type"] == "lambda" and e["requester_managed"] and not e["public_ip"] for e in enis)
+    assert all(e["id"] in " ".join(kill["evidence"]) for e in enis)
+
+
+def test_start_here_shows_the_showcase_first(demo):
+    top = [f.check_id for f in load_run(demo).findings[:7]]
+    assert top[:2] == ["eks-extended-support", "eks-extended-support"]
+    assert {"sns-alarm-topic-no-subscribers", "backup-plan-selects-nothing"} <= set(top)
+
+
+def test_deadlines_render_in_utc(demo):
+    html = (demo / "report.html").read_text()
+    assert ">2026-02-01</time>" in html and "Jan 31" not in html
+
+
+def test_portuguese_report_has_no_english_review_text(tmp_path):
+    run_demo(tmp_path, lang="pt-BR")
+    md = (tmp_path / "report.md").read_text()
+    assert "Rebaixado (Alto para Médio)" in md and "Confirmado:" in md
+    assert "downgraded:" not in md and "confirmed:" not in md and "question:" not in md
+    assert "Free Tier do EC2" in md and "The EC2 Free Tier" not in md
 
 
 def test_coverage_shows_denied_and_throttled_calls(demo):

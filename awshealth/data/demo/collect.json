@@ -12,6 +12,7 @@
  "collected_at": "2026-01-15T12:00:00+00:00",
  "duration_s": 14.32,
  "requests": 257,
+ "calls": 257,
  "counts": {
   "denied": 1,
   "missing": 1,
