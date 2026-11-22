@@ -58,9 +58,15 @@ def cmd_check(a: argparse.Namespace) -> None:
     results = run_checks(snap, Context(account_id=snap.account_id), only=a.only.split(",") if a.only else None)
     findings = [f.to_dict() for r in results for f in r.findings]
     (run / "findings.json").write_text(json.dumps(findings, indent=1))
-    (run / "checks.json").write_text(json.dumps(
-        [{"check_id": r.check_id, "status": r.status, "detail": r.detail, "findings": len(r.findings)} for r in results],
-        indent=1))
+    (run / "checks.json").write_text(
+        json.dumps(
+            [
+                {"check_id": r.check_id, "status": r.status, "detail": r.detail, "findings": len(r.findings)}
+                for r in results
+            ],
+            indent=1,
+        )
+    )
     counts: dict[str, int] = {}
     for r in results:
         counts[r.status] = counts.get(r.status, 0) + 1
@@ -154,7 +160,10 @@ def main(argv: list[str] | None = None) -> None:
     s.set_defaults(fn=cmd_catalog)
 
     a = p.parse_args(argv)
-    a.fn(a)
+    try:
+        a.fn(a)
+    except (FileNotFoundError, ValueError) as exc:
+        sys.exit(f"awshealth: {exc}")
 
 
 if __name__ == "__main__":
