@@ -46,3 +46,13 @@ def test_images_not_collected_means_no_guess():
 
 def test_no_snapshots_is_quiet():
     assert run_one("ebs-orphan-snapshot", snap([])) == []
+
+
+def test_single_orphan_texts_are_singular():
+    [f] = run_one("ebs-orphan-snapshot", snap([snapshot("snap-01", size=100)]))
+    assert "1 EBS snapshot in" in f.t("title")
+    assert f.t("what").startswith("1 self-owned snapshot (100 GiB of volume size) points at a volume that no longer")
+    assert f.t("what", "pt-BR").startswith("1 snapshot da conta (100 GiB de tamanho de volume) aponta para um volume")
+    assert f.t("risk").startswith("It bills") and f.t("risk", "pt-BR").startswith("Ele custa")
+    assert f.owner_question["en"].startswith("Is the orphan snapshot in us-east-1")
+    assert f.owner_question["pt-BR"].startswith("O snapshot órfão em us-east-1")

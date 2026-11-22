@@ -43,3 +43,13 @@ def test_unused_external_role_is_low_with_question():
     assert run_one("iam-role-external-admin-trust",
                    snap(role({"AWS": EXT}, keys=["sts:ExternalId"], attached=(), last_used=None,
                              created="2025-12-01T00:00:00Z"))) == []
+
+
+def test_account_wording_follows_the_number_of_accounts():
+    [f] = run_one("iam-role-external-admin-trust", snap(role({"AWS": EXT})))
+    assert "to account 444455556666 without" in f.t("title")
+    assert "à conta 444455556666 sem" in f.t("title", "pt-BR")
+    two = {"AWS": [EXT, "arn:aws:iam::777788889999:root"]}
+    [f] = run_one("iam-role-external-admin-trust", snap(role(two)))
+    assert "to accounts 444455556666, 777788889999 without" in f.t("title")
+    assert "às contas 444455556666, 777788889999 sem" in f.t("title", "pt-BR")

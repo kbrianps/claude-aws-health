@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_compute import ADDRESSES, tag_map
 from ..model import Claim, Finding
 from ..prices import HOURS_PER_MONTH, price, source
@@ -27,7 +29,7 @@ def run(snap, ctx):
             monthly = None if byoip else round(hourly * HOURS_PER_MONTH, 2)
             name = tag_map(a.get("tags")).get("Name")
             label = f"{ip} ({name})" if name else ip
-            ref = f"--allocation-ids {alloc}" if alloc else f"--public-ips {ip}"
+            ref = f"--allocation-ids {quote(alloc)}" if alloc else f"--public-ips {quote(ip)}"
             cost_en = (f"It bills US${hourly}/h, about US${monthly:,.2f}/month." if monthly is not None
                        else f"It comes from the BYOIP pool {pool}, so AWS does not bill the address itself.")
             cost_pt = (f"Ele custa US$ {hourly}/h, cerca de US$ {monthly:,.2f}/mês." if monthly is not None
@@ -71,10 +73,11 @@ def run(snap, ctx):
                              "recriação planejada? Liberar perde o endereço para sempre.",
                 },
                 verify=[
-                    f"aws ec2 describe-addresses {ref} --region {region} "
+                    f"aws ec2 describe-addresses {ref} --region {quote(region)} "
                     "--query 'Addresses[].[PublicIp,AllocationId,AssociationId,PublicIpv4Pool]' --output table",
-                    f"aws cloudtrail lookup-events --region {region} "
-                    f"--lookup-attributes AttributeKey=ResourceName,AttributeValue={alloc or ip} --max-results 5 "
+                    f"aws cloudtrail lookup-events --region {quote(region)} "
+                    f"--lookup-attributes AttributeKey=ResourceName,AttributeValue={quote(alloc or ip)} "
+                    "--max-results 5 "
                     "--query 'Events[].[EventTime,EventName,Username]' --output table",
                 ],
             ))

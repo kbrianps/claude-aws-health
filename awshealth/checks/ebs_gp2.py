@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_compute import VOLUMES
 from ..model import Claim, Finding
 from ..prices import price, source
 from ..registry import check
+from . import counted
 
 GP3_BASE_IOPS = 3000
 GP2_IOPS_PER_GIB = 3
@@ -34,15 +37,20 @@ def run(snap, ctx):
         notes = []
         caveat_en, caveat_pt = "", ""
         if big:
-            notes.append(f"{len(big)} volumes have more than {GP3_BASE_IOPS} gp2 baseline IOPS.")
-            caveat_en = (f" {len(big)} volumes are over 1000 GiB and get more than {GP3_BASE_IOPS} IOPS on gp2, so "
+            notes.append({"en": f"{len(big)} volumes have more than {GP3_BASE_IOPS} gp2 baseline IOPS.",
+                          "pt-BR": f"{len(big)} volumes têm mais de {GP3_BASE_IOPS} IOPS de base no gp2."})
+            caveat_en = (f" {counted(len(big), 'volume is', 'volumes are')} over 1000 GiB and "
+                         f"{'gets' if len(big) == 1 else 'get'} more than {GP3_BASE_IOPS} IOPS on gp2, so "
                          "gp3 needs provisioned IOPS to match, which lowers the saving.")
-            caveat_pt = (f" {len(big)} volumes têm mais de 1000 GiB e recebem mais de {GP3_BASE_IOPS} IOPS no gp2, "
+            caveat_pt = (f" {counted(len(big), 'volume tem', 'volumes têm')} mais de 1000 GiB e "
+                         f"{'recebe' if len(big) == 1 else 'recebem'} mais de {GP3_BASE_IOPS} IOPS no gp2, "
                          "então o gp3 precisa de IOPS provisionado para igualar, o que reduz a economia.")
         if mid:
-            caveat_en += (f" {len(mid)} volumes are over {GP2_THROUGHPUT_GIB} GiB and may need more than the gp3 "
+            caveat_en += (f" {counted(len(mid), 'volume is', 'volumes are')} over {GP2_THROUGHPUT_GIB} GiB and "
+                          "may need more than the gp3 "
                           "baseline of 125 MiB/s.")
-            caveat_pt += (f" {len(mid)} volumes têm mais de {GP2_THROUGHPUT_GIB} GiB e podem precisar de mais que "
+            caveat_pt += (f" {counted(len(mid), 'volume tem', 'volumes têm')} mais de {GP2_THROUGHPUT_GIB} GiB e "
+                          f"{'pode' if len(mid) == 1 else 'podem'} precisar de mais que "
                           "os 125 MiB/s base do gp3.")
         findings.append(Finding(
             check_id="ebs-gp2",
@@ -54,7 +62,8 @@ def run(snap, ctx):
             text={
                 "en": {
                     "title": f"{len(vols)} EBS volume{'s' if len(vols) > 1 else ''} in {region} still on gp2",
-                    "what": f"{len(vols)} gp2 volumes add up to {total} GiB. Largest: {top}.",
+                    "what": f"{counted(len(vols), 'gp2 volume adds', 'gp2 volumes add')} up to {total} GiB. "
+                            f"Largest: {top}.",
                     "risk": f"gp3 costs US${price('ebs_gp3_gb_month')}/GB-month instead of "
                             f"US${price('ebs_gp2_gb_month')}, about US${monthly:,.2f}/month less.{caveat_en}",
                     "fix": "Run modify-volume --volume-type gp3 (online, no detach), matching IOPS and throughput "
@@ -63,7 +72,8 @@ def run(snap, ctx):
                 },
                 "pt-BR": {
                     "title": f"{len(vols)} volume{'s' if len(vols) > 1 else ''} EBS em {region} ainda em gp2",
-                    "what": f"{len(vols)} volumes gp2 somam {total} GiB. Maiores: {top}.",
+                    "what": f"{counted(len(vols), 'volume gp2 soma', 'volumes gp2 somam')} {total} GiB. "
+                            f"Maiores: {top}.",
                     "risk": f"O gp3 custa US$ {price('ebs_gp3_gb_month')}/GB-mês em vez de "
                             f"US$ {price('ebs_gp2_gb_month')}, cerca de US$ {monthly:,.2f}/mês a menos.{caveat_pt}",
                     "fix": "Rodar modify-volume --volume-type gp3 (online, sem desanexar), igualando IOPS e "
@@ -79,9 +89,9 @@ def run(snap, ctx):
             confidence="medium" if big else "high",
             notes=notes,
             verify=[
-                f"aws ec2 describe-volumes --filters Name=volume-type,Values=gp2 --region {region} "
+                f"aws ec2 describe-volumes --filters Name=volume-type,Values=gp2 --region {quote(region)} "
                 "--query 'Volumes[].[VolumeId,Size,Iops,State]' --output table",
-                f"aws compute-optimizer get-ebs-volume-recommendations --region {region} "
+                f"aws compute-optimizer get-ebs-volume-recommendations --region {quote(region)} "
                 "--query 'volumeRecommendations[].[volumeArn,finding,currentConfiguration.volumeType]' --output table",
             ],
         ))

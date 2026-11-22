@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_security import ACCOUNT_BPA, entry_error
 from ..model import Claim, Finding
 from ..registry import check
@@ -65,7 +67,7 @@ def run(snap, ctx):
                       cfg.get(f, False))
                 for f in FLAGS],
         verify=[
-            f"aws s3control get-public-access-block --account-id {account} --region {region} --query "
+            f"aws s3control get-public-access-block --account-id {quote(account)} --region {quote(region)} --query "
             "'PublicAccessBlockConfiguration' --output table",
         ],
     )]

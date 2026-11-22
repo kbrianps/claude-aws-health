@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_compute import ADDRESSES, INSTANCES, NETWORK_INTERFACES
 from ..model import Claim, Finding
 from ..prices import HOURS_PER_MONTH, price, source
 from ..registry import check
+from . import counted
 
 
 def _kind(eni: dict) -> str:
@@ -49,8 +52,9 @@ def run(snap, ctx):
         for k in kinds.values():
             breakdown[k] = breakdown.get(k, 0) + 1
         parts = ", ".join(f"{k} {n}" for k, n in sorted(breakdown.items(), key=lambda kv: (-kv[1], kv[0])))
-        byoip_en = f" {len(byoip)} BYOIP addresses are not counted." if byoip else ""
-        byoip_pt = f" {len(byoip)} endereços BYOIP não entram na conta." if byoip else ""
+        byoip_en = f" {counted(len(byoip), 'BYOIP address is', 'BYOIP addresses are')} not counted." if byoip else ""
+        byoip_pt = (f" {counted(len(byoip), 'endereço BYOIP não entra', 'endereços BYOIP não entram')} na conta."
+                    if byoip else "")
         plural, noun_pt = (("es", "endereços IPv4 públicos cobrados") if count > 1
                            else ("", "endereço IPv4 público cobrado"))
         findings.append(Finding(
@@ -62,7 +66,8 @@ def run(snap, ctx):
             text={
                 "en": {
                     "title": f"{count} public IPv4 address{plural} billed in {region}",
-                    "what": f"{count} distinct public IPv4 addresses by owner: {parts}.{byoip_en}",
+                    "what": f"{counted(count, 'distinct public IPv4 address', 'distinct public IPv4 addresses')} "
+                            f"by owner: {parts}.{byoip_en}",
                     "risk": f"Every public IPv4 address bills US${hourly}/h, in use or idle, about "
                             f"US${monthly:,.2f}/month in total.",
                     "fix": "Turn off auto-assign public IP on subnets that do not need it, put private workloads "
@@ -70,7 +75,8 @@ def run(snap, ctx):
                 },
                 "pt-BR": {
                     "title": f"{count} {noun_pt} em {region}",
-                    "what": f"{count} endereços IPv4 públicos distintos por dono: {parts}.{byoip_pt}",
+                    "what": f"{counted(count, 'endereço IPv4 público distinto', 'endereços IPv4 públicos distintos')} "
+                            f"por dono: {parts}.{byoip_pt}",
                     "risk": f"Cada IPv4 público custa US$ {hourly}/h, em uso ou parado, cerca de "
                             f"US$ {monthly:,.2f}/mês no total.",
                     "fix": "Desligar o IP público automático nas subnets que não precisam, colocar cargas privadas "
@@ -80,15 +86,18 @@ def run(snap, ctx):
             claims=[Claim(f"ec2:DescribeNetworkInterfaces@{region}", f"count(public_ip).{k}", n)
                     for k, n in sorted(breakdown.items())],
             monthly_usd=monthly,
-            usd_calc=f"{count} addresses x US${hourly}/h x {HOURS_PER_MONTH} h = US${monthly:,.2f}/month "
+            usd_calc=f"{counted(count, 'address', 'addresses')} x US${hourly}/h x {HOURS_PER_MONTH} h = "
+                     f"US${monthly:,.2f}/month "
                      f"({source('public_ipv4_hour')})",
-            notes=["The EC2 Free Tier covers 750 hours a month of in-use public IPv4 for 12 months; idle addresses "
-                   "are not covered."],
+            notes=[{"en": "The EC2 Free Tier covers 750 hours a month of in-use public IPv4 for 12 months; idle "
+                          "addresses are not covered.",
+                    "pt-BR": "O Free Tier do EC2 cobre 750 horas por mês de IPv4 público em uso durante 12 meses; "
+                             "endereços parados não entram."}],
             verify=[
-                f"aws ec2 describe-network-interfaces --region {region} "
+                f"aws ec2 describe-network-interfaces --region {quote(region)} "
                 "--query 'NetworkInterfaces[?Association.PublicIp].[NetworkInterfaceId,InterfaceType,"
                 "Association.PublicIp,Description]' --output table",
-                f"aws ec2 describe-addresses --region {region} "
+                f"aws ec2 describe-addresses --region {quote(region)} "
                 "--query 'Addresses[].[PublicIp,AssociationId,PublicIpv4Pool]' --output table",
             ],
         ))

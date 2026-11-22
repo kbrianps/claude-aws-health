@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from shlex import quote
 
 from ..model import Claim, Finding
 from ..prices import HOURS_PER_MONTH, price, source
@@ -71,11 +72,12 @@ def _text(name, version, days, when, policy, monthly):
 
 def _verify(name, region, version):
     return [
-        f"aws eks describe-cluster --name {name} --region {region} "
+        f"aws eks describe-cluster --name {quote(name)} --region {quote(region)} "
         "--query 'cluster.[version,upgradePolicy.supportType]' --output text",
-        f"aws eks describe-cluster-versions --region {region} --cluster-versions {version} "
+        f"aws eks describe-cluster-versions --region {quote(region)} --cluster-versions {quote(version)} "
         "--query 'clusterVersions[].[clusterVersion,endOfStandardSupportDate,endOfExtendedSupportDate]' --output table",
-        f"aws eks list-insights --cluster-name {name} --region {region} --filter categories=UPGRADE_READINESS "
+        f"aws eks list-insights --cluster-name {quote(name)} --region {quote(region)} "
+        "--filter categories=UPGRADE_READINESS "
         "--query 'insights[].[name,insightStatus.status]' --output table",
     ]
 

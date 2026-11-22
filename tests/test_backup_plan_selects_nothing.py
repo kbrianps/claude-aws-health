@@ -1,3 +1,5 @@
+import shlex
+
 from awshealth.calls_security import BACKUP_PLAN, BACKUP_PLANS, BACKUP_SELECTION, BACKUP_VAULTS, TAGGED_RESOURCES
 from awshealth.testing import run_one, snap_with
 
@@ -63,3 +65,11 @@ def test_short_keys_need_exact_case_insensitive_match():
     [f] = run_one("backup-plan-selects-nothing", snap(sel, resources))
     assert f.severity == "medium"
     assert "Near misses" not in f.t("what")
+
+
+def test_hostile_tag_key_keeps_a_quoted_verify_command():
+    key = "team name; $(touch x)"
+    sel = {"list_of_tags": [{"ConditionKey": key, "ConditionValue": "data"}]}
+    [f] = run_one("backup-plan-selects-nothing", snap(sel, [{"arn": DB, "tags": []}]))
+    assert len(f.verify) == 3
+    assert f"Key={key}" in shlex.split(f.verify[2])

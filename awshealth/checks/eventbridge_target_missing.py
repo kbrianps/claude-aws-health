@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+from shlex import quote
+
 from ..calls_security import FUNCTIONS, RULE_TARGETS, RULES
 from ..model import Claim, Finding
 from ..registry import check
+from . import counted
 
 CHECK_ID = "eventbridge-target-missing"
 
@@ -53,20 +57,20 @@ def run(snap, ctx):
                 region=region,
                 text={
                     "en": {
-                        "title": f"EventBridge rule {rule_name} is enabled but targets {len(gone)} deleted Lambda "
-                                 "function(s)",
+                        "title": f"EventBridge rule {rule_name} is enabled but targets "
+                                 f"{counted(len(gone), 'deleted Lambda function', 'deleted Lambda functions')}",
                         "what": f"The enabled rule {rule_name} in {region} sends events to {gone_txt}, which no "
-                                "longer exist.",
+                                f"longer {'exists' if len(gone) == 1 else 'exist'}.",
                         "risk": "Every matching event fails delivery. The scheduled job or integration behind this "
                                 "rule silently stopped.",
                         "fix": "Point the target at the current function or delete the rule. If the rule still "
                                "matters, add a dead-letter queue to the target so failures are visible.",
                     },
                     "pt-BR": {
-                        "title": f"A regra {rule_name} do EventBridge está ativa mas aponta para {len(gone)} "
-                                 "função(ões) Lambda apagada(s)",
+                        "title": f"A regra {rule_name} do EventBridge está ativa mas aponta para "
+                                 f"{counted(len(gone), 'função Lambda apagada', 'funções Lambda apagadas')}",
                         "what": f"A regra ativa {rule_name} em {region} envia eventos para {gone_txt}, que não "
-                                "existem mais.",
+                                f"{'existe' if len(gone) == 1 else 'existem'} mais.",
                         "risk": "Todo evento que casa com a regra falha na entrega. A rotina ou integração por trás "
                                 "dela parou sem aviso.",
                         "fix": "Apontar o alvo para a função atual ou apagar a regra. Se a regra ainda importa, "
@@ -78,10 +82,11 @@ def run(snap, ctx):
                          f"Functions[?FunctionName=='{_function(a)[2]}']", [])
                    for a in gone],
                 verify=[
-                    f"aws events list-targets-by-rule --rule {rule_name} --region {region} --query "
+                    f"aws events list-targets-by-rule --rule {quote(rule_name)} --region {quote(region)} --query "
                     "'Targets[].[Id,Arn]' --output table",
-                ] + [f"aws lambda list-functions --region {_function(a)[0]} --query "
-                     f"\"Functions[?FunctionName=='{_function(a)[2]}'].FunctionArn\" --output text"
+                ] + [f"aws lambda list-functions --region {quote(_function(a)[0])} --query "
+                     + quote(f"Functions[?FunctionName==`{json.dumps(_function(a)[2])}`].FunctionArn") + " "
+                             "--output text"
                      for a in gone[:2]],
             ))
     return findings

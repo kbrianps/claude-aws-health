@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_security import (
     ACCESS_KEYS,
     AUTH_DETAILS,
@@ -11,6 +13,7 @@ from ..calls_security import (
 )
 from ..model import Claim, Finding
 from ..registry import check
+from . import counted
 
 CHECK_ID = "iam-admin-user-static-key"
 
@@ -60,7 +63,8 @@ def run(snap, ctx):
             region="global",
             text={
                 "en": {
-                    "title": f"IAM user {name} has administrator access and {len(keys)} active access key(s)",
+                    "title": f"IAM user {name} has administrator access and "
+                             f"{counted(len(keys), 'active access key', 'active access keys')}",
                     "what": f"{name} gets administrator access through {reason}. Active keys: {detail_en}.",
                     "risk": "A leaked long-lived key gives full control of the account until someone notices and "
                             "revokes it.",
@@ -69,8 +73,8 @@ def run(snap, ctx):
                            "down and rotate it.",
                 },
                 "pt-BR": {
-                    "title": f"O usuário IAM {name} tem acesso de administrador e {len(keys)} chave(s) de acesso "
-                             "ativa(s)",
+                    "title": f"O usuário IAM {name} tem acesso de administrador e "
+                             f"{counted(len(keys), 'chave de acesso ativa', 'chaves de acesso ativas')}",
                     "what": f"{name} tem acesso de administrador por {reason}. Chaves ativas: {detail_pt}.",
                     "risk": "Uma chave de longa duração vazada dá controle total da conta até alguém perceber e "
                             "revogar.",
@@ -84,11 +88,12 @@ def run(snap, ctx):
                              "pt-BR": f"{name} é um usuário de emergência (break-glass), e quem guarda a chave?"}
                             if bg else {}),
             verify=[
-                f"aws iam list-access-keys --user-name {name} --region us-east-1 --query "
+                f"aws iam list-access-keys --user-name {quote(name)} --region us-east-1 --query "
                 "'AccessKeyMetadata[].[AccessKeyId,Status,CreateDate]' --output table",
-                f"aws iam list-attached-user-policies --user-name {name} --region us-east-1 --query "
+                f"aws iam list-attached-user-policies --user-name {quote(name)} --region us-east-1 --query "
                 "'AttachedPolicies[].PolicyArn' --output text",
-                f"aws iam list-groups-for-user --user-name {name} --region us-east-1 --query 'Groups[].GroupName' "
+                f"aws iam list-groups-for-user --user-name {quote(name)} --region us-east-1 "
+                "--query 'Groups[].GroupName' "
                 "--output text",
             ],
         ))

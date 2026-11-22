@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_compute import RDS_CLUSTERS, RDS_INSTANCES, env_of
 from ..model import SEVERITIES, Claim, Finding
 from ..registry import check
@@ -78,10 +80,10 @@ def _finding(snap, region, kind, db, env, issues):
     label_en = "RDS cluster" if kind == "cluster" else "RDS instance"
     label_pt = "O cluster RDS" if kind == "cluster" else "A instância RDS"
     if kind == "cluster":
-        cmd = f"aws rds describe-db-clusters --db-cluster-identifier {name} --region {region} "
+        cmd = f"aws rds describe-db-clusters --db-cluster-identifier {quote(name)} --region {quote(region)} "
         fields = "DBClusters[].[StorageEncrypted,MultiAZ,BackupRetentionPeriod,DeletionProtection]"
     else:
-        cmd = f"aws rds describe-db-instances --db-instance-identifier {name} --region {region} "
+        cmd = f"aws rds describe-db-instances --db-instance-identifier {quote(name)} --region {quote(region)} "
         fields = "DBInstances[].[StorageEncrypted,MultiAZ,BackupRetentionPeriod,PubliclyAccessible,DeletionProtection]"
     return Finding(
         check_id="rds-posture",
@@ -113,10 +115,13 @@ def _finding(snap, region, kind, db, env, issues):
         claims=[Claim(f"rds:DescribeDBInstances@{region}", i[0], i[1]) if "." in i[0]
                 else Claim(f"rds:Describe{root}@{region}", f"{name}.{i[0]}", i[1]) for i in issues],
         confidence="high" if env else "medium",
-        notes=[] if env else ["No environment tag found, so the database was treated as production for encryption."],
+        notes=[] if env else [{"en": "No environment tag found, so the database was treated as production for "
+                                     "encryption.",
+                               "pt-BR": "Nenhuma tag de ambiente encontrada, então o banco foi tratado como "
+                                        "produção para a criptografia."}],
         verify=[
             cmd + f"--query '{fields}' --output table",
-            f"aws rds list-tags-for-resource --resource-name {db.get('arn') or name} --region {region} "
+            f"aws rds list-tags-for-resource --resource-name {quote(db.get('arn') or name)} --region {quote(region)} "
             "--query 'TagList[].[Key,Value]' --output table",
         ],
     )

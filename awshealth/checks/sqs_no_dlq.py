@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from shlex import quote
 
 from ..calls_security import QUEUE_ATTRS, QUEUES
 from ..model import Claim, Finding
@@ -52,7 +53,7 @@ def run(snap, ctx):
                     "en": {
                         "title": f"SQS queue {name} has no dead-letter queue",
                         "what": f"Queue {name} in {region} has no redrive policy. Messages are kept for {hours:g} "
-                                "hour(s).",
+                                f"{'hour' if hours == 1 else 'hours'}.",
                         "risk": "A message that always fails is retried until it expires and is then lost without a "
                                 "trace."
                                 + (" With retention this short, a one-hour consumer outage loses data."
@@ -63,7 +64,7 @@ def run(snap, ctx):
                     "pt-BR": {
                         "title": f"A fila SQS {name} não tem fila de dead-letter",
                         "what": f"A fila {name} em {region} não tem redrive policy. As mensagens ficam guardadas por "
-                                f"{hours:g} hora(s).",
+                                f"{hours:g} {'hora' if hours == 1 else 'horas'}.",
                         "risk": "Uma mensagem que sempre falha é reprocessada até expirar e depois some sem rastro."
                                 + (" Com retenção tão curta, uma hora de consumidor parado perde dados."
                                    if short else ""),
@@ -74,8 +75,8 @@ def run(snap, ctx):
                 claims=[Claim(f"sqs:GetQueueAttributes@{region}", f"{url}.RedrivePolicy", None),
                         Claim(f"sqs:GetQueueAttributes@{region}", f"{url}.MessageRetentionPeriod", retention)],
                 verify=[
-                    f"aws sqs get-queue-attributes --queue-url {url} --attribute-names RedrivePolicy "
-                    f"MessageRetentionPeriod --region {region} --query 'Attributes' --output table",
+                    f"aws sqs get-queue-attributes --queue-url {quote(url)} --attribute-names RedrivePolicy "
+                    f"MessageRetentionPeriod --region {quote(region)} --query 'Attributes' --output table",
                 ],
             ))
     return findings

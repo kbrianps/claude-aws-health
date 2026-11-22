@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_compute import EBS_PRICE_KEYS, VOLUMES, ebs_gb_month, parse_time, tag_map
 from ..model import Claim, Finding
 from ..prices import source
@@ -50,7 +52,9 @@ def run(snap, ctx):
                     "pt-BR": f"O volume {vid} foi criado para o PVC {pvc} do Kubernetes. Esse PersistentVolume é "
                              "mantido de propósito com reclaimPolicy Retain, ou o claim foi apagado de vez?",
                 }
-                notes.append("Kubernetes PVC volume: a reclaimPolicy Retain keeps the data on purpose.")
+                notes.append({"en": "Kubernetes PVC volume: a reclaimPolicy Retain keeps the data on purpose.",
+                              "pt-BR": "Volume de PVC do Kubernetes: reclaimPolicy Retain guarda os dados de "
+                                       "propósito."})
             findings.append(Finding(
                 check_id="ebs-unattached",
                 resource=f"arn:aws:ec2:{region}:{snap.account_id}:volume/{vid}",
@@ -82,10 +86,10 @@ def run(snap, ctx):
                 confidence="low" if pvc else "high",
                 notes=notes,
                 verify=[
-                    f"aws ec2 describe-volumes --volume-ids {vid} --region {region} "
+                    f"aws ec2 describe-volumes --volume-ids {quote(vid)} --region {quote(region)} "
                     "--query 'Volumes[].[VolumeId,State,Size,VolumeType,CreateTime]' --output table",
-                    f"aws cloudtrail lookup-events --region {region} "
-                    f"--lookup-attributes AttributeKey=ResourceName,AttributeValue={vid} --max-results 5 "
+                    f"aws cloudtrail lookup-events --region {quote(region)} "
+                    f"--lookup-attributes AttributeKey=ResourceName,AttributeValue={quote(vid)} --max-results 5 "
                     "--query 'Events[].[EventTime,EventName,Username]' --output table",
                 ],
             ))

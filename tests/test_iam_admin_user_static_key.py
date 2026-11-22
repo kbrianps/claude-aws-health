@@ -60,3 +60,9 @@ def test_missing_last_used_data_says_unknown():
     [f] = run_one("iam-admin-user-static-key", snap_)
     assert "last used unknown" in f.t("what")
     assert "desconhecido" in f.t("what", "pt-BR")
+
+
+def test_single_key_title_is_singular():
+    [f] = run_one("iam-admin-user-static-key", snap(auth(attached=[ADMIN])))
+    assert "and 1 active access key" in f.t("title") and "(s)" not in f.t("title")
+    assert f.t("title", "pt-BR").endswith("1 chave de acesso ativa")

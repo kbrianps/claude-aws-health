@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_compute import LISTENERS, LOAD_BALANCERS, TARGET_GROUPS, TARGET_HEALTH, parse_time
 from ..model import Claim, Finding
 from ..prices import HOURS_PER_MONTH, price, source
 from ..registry import check
+from . import counted
 
 HOURLY_KEYS = {"application": "alb_hour", "network": "nlb_hour"}
 NON_FORWARD = {"redirect", "fixed-response"}
@@ -46,9 +49,11 @@ def run(snap, ctx):
             monthly = round(price(key) * HOURS_PER_MONTH, 2) if key else None
             if tgs:
                 tg_names = ", ".join(tg.get("name") or tg["arn"] for tg in tgs)
-                what_en = (f"Load balancer {name} ({lb_type}, {lb.get('scheme')}) has {len(tgs)} target groups "
+                what_en = (f"Load balancer {name} ({lb_type}, {lb.get('scheme')}) has "
+                           f"{counted(len(tgs), 'target group', 'target groups')} "
                            f"({tg_names}) and none has a registered target.")
-                what_pt = (f"O load balancer {name} ({lb_type}, {lb.get('scheme')}) tem {len(tgs)} target groups "
+                what_pt = (f"O load balancer {name} ({lb_type}, {lb.get('scheme')}) tem "
+                           f"{counted(len(tgs), 'target group', 'target groups')} "
                            f"({tg_names}) e nenhum tem target registrado.")
             else:
                 what_en = f"Load balancer {name} ({lb_type}, {lb.get('scheme')}) has no target group."
@@ -71,14 +76,14 @@ def run(snap, ctx):
                 }
             first_tg = tgs[0]["arn"] if tgs else ""
             verify = [
-                f"aws elbv2 describe-target-groups --load-balancer-arn {arn} --region {region} "
+                f"aws elbv2 describe-target-groups --load-balancer-arn {quote(arn)} --region {quote(region)} "
                 "--query 'TargetGroups[].[TargetGroupName,TargetType,TargetGroupArn]' --output table",
-                f"aws elbv2 describe-listeners --load-balancer-arn {arn} --region {region} "
+                f"aws elbv2 describe-listeners --load-balancer-arn {quote(arn)} --region {quote(region)} "
                 "--query 'Listeners[].[Port,Protocol,DefaultActions[0].Type]' --output table",
             ]
             if first_tg:
                 verify.append(
-                    f"aws elbv2 describe-target-health --target-group-arn {first_tg} --region {region} "
+                    f"aws elbv2 describe-target-health --target-group-arn {quote(first_tg)} --region {quote(region)} "
                     "--query 'TargetHealthDescriptions[].[Target.Id,TargetHealth.State]' --output table")
             findings.append(Finding(
                 check_id="elb-no-targets",

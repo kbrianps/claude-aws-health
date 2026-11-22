@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_security import SECRETS, days_since
 from ..model import Claim, Finding
 from ..prices import price, source
@@ -80,7 +82,7 @@ def run(snap, ctx):
                                  "pt-BR": f"{name} é uma credencial de emergência, de DR ou de rotina anual?"}
                                 if unused else {}),
                 verify=[
-                    f"aws secretsmanager describe-secret --secret-id {name} --region {region} --query "
+                    f"aws secretsmanager describe-secret --secret-id {quote(name)} --region {quote(region)} --query "
                     "'[RotationEnabled,LastChangedDate,LastAccessedDate]' --output text",
                 ],
             ))

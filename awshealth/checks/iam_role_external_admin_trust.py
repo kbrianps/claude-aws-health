@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from shlex import quote
 
 from ..calls_security import AUTH_DETAILS, admin_policy_arns, admin_reason, as_list, days_since
 from ..model import Claim, Finding
@@ -58,20 +59,23 @@ def run(snap, ctx):
         used_en = f"last used {str(last)[:10]}" if last else "never used"
         used_pt = f"último uso em {str(last)[:10]}" if last else "nunca usada"
         accounts = ", ".join(sorted(no_id or external))
+        one = len(no_id or external) == 1
+        acc_en = "account" if one else "accounts"
         claims = [
             Claim("iam:GetAccountAuthorizationDetails@global", f"{name}.AssumeRolePolicyDocument.Principal.AWS",
                   sorted(external)),
             Claim("iam:GetAccountAuthorizationDetails@global", f"{name}.RoleLastUsed.LastUsedDate", last),
         ]
         verify = [
-            f"aws iam get-role --role-name {name} --region us-east-1 --query "
+            f"aws iam get-role --role-name {quote(name)} --region us-east-1 --query "
             "'Role.AssumeRolePolicyDocument.Statement[].[Effect,Principal.AWS]' --output text",
-            f"aws iam get-role --role-name {name} --region us-east-1 --query 'Role.RoleLastUsed' --output table",
-            f"aws iam list-attached-role-policies --role-name {name} --region us-east-1 --query "
+            f"aws iam get-role --role-name {quote(name)} --region us-east-1 --query 'Role.RoleLastUsed' --output table",
+            f"aws iam list-attached-role-policies --role-name {quote(name)} --region us-east-1 --query "
             "'AttachedPolicies[].PolicyArn' --output text",
         ]
-        question = {"en": f"Who uses role {name} from account(s) {accounts}, and is it still needed?",
-                    "pt-BR": f"Quem usa a role {name} a partir da(s) conta(s) {accounts}, e ela ainda é necessária?"}
+        question = {"en": f"Who uses role {name} from {acc_en} {accounts}, and is it still needed?",
+                    "pt-BR": f"Quem usa a role {name} a partir {'da conta' if one else 'das contas'} {accounts}, e "
+                             "ela ainda é necessária?"}
         if admin and no_id:
             claims.append(Claim("iam:GetAccountAuthorizationDetails@global", f"{name}.admin", admin))
             anyone_en = " Principal * means any AWS account." if "*" in no_id else ""
@@ -84,7 +88,7 @@ def run(snap, ctx):
                 region="global",
                 text={
                     "en": {
-                        "title": f"Role {name} gives administrator access to account(s) {accounts} without an "
+                        "title": f"Role {name} gives administrator access to {acc_en} {accounts} without an "
                                  "external ID",
                         "what": f"The trust policy of {name} lets {accounts} assume it with no sts:ExternalId "
                                 f"condition, and the role has administrator access through {admin}. It was "
@@ -97,7 +101,8 @@ def run(snap, ctx):
                                "in the trust policy.",
                     },
                     "pt-BR": {
-                        "title": f"A role {name} dá acesso de administrador à(s) conta(s) {accounts} sem external ID",
+                        "title": f"A role {name} dá acesso de administrador {'à conta' if one else 'às contas'} "
+                                 f"{accounts} sem external ID",
                         "what": f"A trust policy de {name} permite que {accounts} assuma a role sem condição "
                                 f"sts:ExternalId, e a role tem acesso de administrador por {admin}. Situação de uso: "
                                 f"{used_pt}.{anyone_pt}",
@@ -122,7 +127,7 @@ def run(snap, ctx):
                 region="global",
                 text={
                     "en": {
-                        "title": f"Role {name} trusts account(s) {accounts} and has not been used in over a year",
+                        "title": f"Role {name} trusts {acc_en} {accounts} and has not been used in over a year",
                         "what": f"The trust policy of {name} lets {', '.join(sorted(external))} assume it. It was "
                                 f"{used_en}.",
                         "risk": "An unused door into the account. If the other account is compromised or changes "
@@ -131,7 +136,8 @@ def run(snap, ctx):
                                "the trust policy.",
                     },
                     "pt-BR": {
-                        "title": f"A role {name} confia na(s) conta(s) {accounts} e está sem uso há mais de um ano",
+                        "title": f"A role {name} confia {'na conta' if one else 'nas contas'} {accounts} e está sem "
+                                 "uso há mais de um ano",
                         "what": f"A trust policy de {name} permite que {', '.join(sorted(external))} assuma a role. "
                                 f"Situação de uso: {used_pt}.",
                         "risk": "Uma porta de entrada sem uso. Se a outra conta for comprometida ou mudar de dono, "

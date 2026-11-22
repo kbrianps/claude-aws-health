@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_compute import NETWORK_INTERFACES, SECURITY_GROUPS
 from ..model import Claim, Finding
 from ..registry import check
+from . import counted
 
 ADMIN_PORTS = {22: "SSH", 3389: "RDP", 3306: "MySQL", 5432: "PostgreSQL", 1433: "SQL Server", 6379: "Redis",
                9200: "Elasticsearch", 27017: "MongoDB", 2375: "Docker API", 5900: "VNC"}
@@ -68,8 +71,10 @@ def run(snap, ctx):
             port_list = ", ".join(f"{p} ({ADMIN_PORTS[p]})" for p in sorted(ports))
             owners = ", ".join(_owner(e) for e in enis[:10]) + (f" and {len(enis) - 10} more" if len(enis) > 10 else "")
             if enis:
-                use_en = f"It is attached to {len(enis)} network interfaces ({len(public)} with a public IP): {owners}."
-                use_pt = f"Ele está anexado a {len(enis)} interfaces de rede ({len(public)} com IP público): {owners}."
+                use_en = (f"It is attached to {counted(len(enis), 'network interface', 'network interfaces')} "
+                          f"({len(public)} with a public IP): {owners}.")
+                use_pt = (f"Ele está anexado a {counted(len(enis), 'interface de rede', 'interfaces de rede')} "
+                          f"({len(public)} com IP público): {owners}.")
             elif known_enis:
                 use_en = "It is not attached to any network interface today."
                 use_pt = "Ele não está anexado a nenhuma interface de rede hoje."
@@ -107,13 +112,18 @@ def run(snap, ctx):
                 claims=[Claim(f"ec2:DescribeSecurityGroups@{region}", f"{gid}.IpPermissions", sorted(ports)),
                         Claim(f"ec2:DescribeNetworkInterfaces@{region}", f"group-id={gid}", [e["id"] for e in enis])],
                 confidence="high" if known_enis else "medium",
-                notes=[] if public or not enis else ["No attached interface has a public IP; exposure depends on "
-                                                     "load balancers or NAT in front of them."],
+                notes=[] if public or not enis else [{
+                    "en": "No attached interface has a public IP; exposure depends on load balancers or NAT in "
+                          "front of them.",
+                    "pt-BR": "Nenhuma interface anexada tem IP público; a exposição depende de load balancers ou "
+                             "NAT na frente delas."}],
                 verify=[
-                    f"aws ec2 describe-security-group-rules --filters Name=group-id,Values={gid} --region {region} "
+                    f"aws ec2 describe-security-group-rules --filters Name=group-id,Values={quote(gid)} "
+                    f"--region {quote(region)} "
                     "--query 'SecurityGroupRules[?!IsEgress].[SecurityGroupRuleId,IpProtocol,FromPort,ToPort,"
                     "CidrIpv4,CidrIpv6]' --output table",
-                    f"aws ec2 describe-network-interfaces --filters Name=group-id,Values={gid} --region {region} "
+                    f"aws ec2 describe-network-interfaces --filters Name=group-id,Values={quote(gid)} "
+                    f"--region {quote(region)} "
                     "--query 'NetworkInterfaces[].[NetworkInterfaceId,InterfaceType,Attachment.InstanceId,"
                     "Association.PublicIp,Description]' --output table",
                 ],

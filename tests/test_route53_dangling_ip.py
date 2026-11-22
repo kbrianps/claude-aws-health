@@ -1,3 +1,5 @@
+import jmespath
+
 from awshealth.calls_core import IP_RANGES
 from awshealth.calls_security import ADDRESSES, ENI_PUBLIC_IPS, HOSTED_ZONES, RECORD_SETS
 from awshealth.testing import run_one, snap_with
@@ -48,3 +50,18 @@ def test_unscanned_region_lowers_confidence():
     assert f.confidence == "medium"
     assert "eu-west-1" in f.t("what")
     assert "eu-west-1" in f.t("what", "pt-BR")
+
+
+def test_record_sets_keep_only_address_and_alias_records():
+    page = {"ResourceRecordSets": [
+        {"Name": "a.example.com.", "Type": "A", "TTL": 300, "ResourceRecords": [{"Value": "192.0.2.10"}]},
+        {"Name": "b.example.com.", "Type": "AAAA", "TTL": 300, "ResourceRecords": [{"Value": "2001:db8::1"}]},
+        {"Name": "c.example.com.", "Type": "CNAME", "TTL": 300, "ResourceRecords": [{"Value": "a.example.com."}]},
+        {"Name": "d.example.com.", "Type": "A", "AliasTarget": {"DNSName": "lb.example.com.", "HostedZoneId": "Z1"}},
+        {"Name": "example.com.", "Type": "TXT", "TTL": 300, "ResourceRecords": [{"Value": "verification=x"}]},
+        {"Name": "s._domainkey.example.com.", "Type": "TXT", "ResourceRecords": [{"Value": "v=DKIM1; p=x"}]},
+        {"Name": "example.com.", "Type": "MX", "TTL": 300, "ResourceRecords": [{"Value": "10 mail.example.com."}]},
+    ]}
+    kept = jmespath.search(RECORD_SETS.keep, page)
+    assert [r["name"] for r in kept] == ["a.example.com.", "b.example.com.", "c.example.com.", "d.example.com."]
+    assert "verification" not in str(kept) and "DKIM" not in str(kept)

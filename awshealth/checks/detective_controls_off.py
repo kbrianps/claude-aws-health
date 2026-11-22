@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_security import (
     ANALYZERS,
     CONFIG_RECORDERS,
@@ -15,6 +17,7 @@ from ..calls_security import (
 )
 from ..model import Claim, Finding
 from ..registry import check
+from . import counted
 
 CHECK_ID = "detective-controls-off"
 NAMES = {"guardduty": ("GuardDuty", "GuardDuty"), "config": ("AWS Config recording", "gravação do AWS Config"),
@@ -82,12 +85,12 @@ def _region_findings(snap):
         unk_en = f" Could not read: {', '.join(NAMES[k][0] for k in unknown)}." if unknown else ""
         unk_pt = f" Não foi possível ler: {', '.join(NAMES[k][1] for k in unknown)}." if unknown else ""
         verify = {
-            "guardduty": f"aws guardduty list-detectors --region {region} --query 'DetectorIds' --output text",
-            "config": (f"aws configservice describe-configuration-recorder-status --region {region} --query "
+            "guardduty": f"aws guardduty list-detectors --region {quote(region)} --query 'DetectorIds' --output text",
+            "config": (f"aws configservice describe-configuration-recorder-status --region {quote(region)} --query "
                        "'ConfigurationRecordersStatus[].[name,recording,lastStatus]' --output table"),
-            "accessanalyzer": (f"aws accessanalyzer list-analyzers --region {region} --query "
+            "accessanalyzer": (f"aws accessanalyzer list-analyzers --region {quote(region)} --query "
                                "'analyzers[].[name,type,status]' --output table"),
-            "securityhub": f"aws securityhub describe-hub --region {region} --query 'HubArn' --output text",
+            "securityhub": f"aws securityhub describe-hub --region {quote(region)} --query 'HubArn' --output text",
         }
         findings.append(Finding(
             check_id=CHECK_ID,
@@ -97,8 +100,9 @@ def _region_findings(snap):
             region=region,
             text={
                 "en": {
-                    "title": f"{region} runs {count} workloads with {off_en} off",
-                    "what": (f"{region} has {count} EC2 instances, Lambda functions or RDS instances. These "
+                    "title": f"{region} runs {counted(count, 'workload', 'workloads')} with {off_en} off",
+                    "what": (f"{region} has {counted(count, 'workload', 'workloads')} (EC2 instances, Lambda "
+                             "functions or RDS instances). These "
                              f"detective controls are off there: {off_en}.{unk_en}"),
                     "risk": ("A compromised key or instance in this region would act without any alert, and there "
                              "would be no configuration history to investigate later."),
@@ -106,8 +110,9 @@ def _region_findings(snap):
                             "administrator so new regions and accounts are covered automatically."),
                 },
                 "pt-BR": {
-                    "title": f"{region} roda {count} cargas com {off_pt} desligado",
-                    "what": (f"{region} tem {count} instâncias EC2, funções Lambda ou instâncias RDS. Estes "
+                    "title": f"{region} roda {counted(count, 'carga', 'cargas')} com {off_pt} desligado",
+                    "what": (f"{region} tem {counted(count, 'carga', 'cargas')} (instâncias EC2, funções Lambda ou "
+                             "instâncias RDS). Estes "
                              f"controles de detecção estão desligados lá: {off_pt}.{unk_pt}"),
                     "risk": ("Uma chave ou instância comprometida nesta região agiria sem nenhum alerta, e não "
                              "haveria histórico de configuração para investigar depois."),
@@ -139,8 +144,12 @@ def _trail_finding(snap):
     if not logging:
         severity, title_en, title_pt = ("high", "No multi-region CloudTrail trail is logging",
                                         "Nenhuma trilha multi-região do CloudTrail está registrando")
-        what_en = f"Of {len(multi)} multi-region trail(s), none is logging."
-        what_pt = f"Das {len(multi)} trilha(s) multi-região, nenhuma está registrando."
+        if len(multi) == 1:
+            what_en = "The only multi-region trail is not logging."
+            what_pt = "A única trilha multi-região não está registrando."
+        else:
+            what_en = f"Of {len(multi)} multi-region trails, none is logging."
+            what_pt = f"Das {len(multi)} trilhas multi-região, nenhuma está registrando."
         risk_en = "API calls are not recorded in every region, so an incident cannot be reconstructed."
         risk_pt = ("Chamadas de API não ficam registradas em todas as regiões, então um incidente não pode ser "
                    "reconstruído.")
@@ -148,8 +157,12 @@ def _trail_finding(snap):
         names = ", ".join(t.get("name", "") for t in logging)
         severity, title_en, title_pt = ("medium", "CloudTrail log file validation is off",
                                         "Validação de arquivos de log do CloudTrail desligada")
-        what_en = f"The logging multi-region trail(s) {names} have log file validation off."
-        what_pt = f"A(s) trilha(s) multi-região ativa(s) {names} estão com a validação de arquivos de log desligada."
+        if len(logging) == 1:
+            what_en = f"The logging multi-region trail {names} has log file validation off."
+            what_pt = f"A trilha multi-região ativa {names} está com a validação de arquivos de log desligada."
+        else:
+            what_en = f"The logging multi-region trails {names} have log file validation off."
+            what_pt = f"As trilhas multi-região ativas {names} estão com a validação de arquivos de log desligada."
         risk_en = "Without digest files nobody can prove the logs were not edited or deleted after an incident."
         risk_pt = ("Sem os arquivos de digest ninguém consegue provar que os logs não foram editados ou apagados "
                    "depois de um incidente.")
@@ -171,9 +184,10 @@ def _trail_finding(snap):
                       t.get("validation")) for t in multi]
         + [Claim(f"cloudtrail:GetTrailStatus@{region}", "logging_multi_region_trails", len(logging))],
         verify=[
-            (f"aws cloudtrail describe-trails --region {region} --query "
+            (f"aws cloudtrail describe-trails --region {quote(region)} --query "
              "'trailList[].[Name,IsMultiRegionTrail,LogFileValidationEnabled,HomeRegion]' --output table"),
-        ] + [(f"aws cloudtrail get-trail-status --name {t.get('arn')} --region {region} --query 'IsLogging' --output "
+        ] + [(f"aws cloudtrail get-trail-status --name {quote(t.get('arn'))} --region {quote(region)} "
+              "--query 'IsLogging' --output "
               "text")
              for t in multi[:2]],
     )]

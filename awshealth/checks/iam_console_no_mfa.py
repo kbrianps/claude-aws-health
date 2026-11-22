@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_security import AUTH_DETAILS, LOGIN_PROFILE, MFA_DEVICES, USERS, days_since, iam_admins
 from ..model import Claim, Finding
 from ..registry import check
@@ -75,9 +77,10 @@ def run(snap, ctx):
                                       "com esse usuário?"}
                             if never_used else {}),
             verify=[
-                f"aws iam get-login-profile --user-name {name} --region us-east-1 --query 'LoginProfile.CreateDate' "
+                f"aws iam get-login-profile --user-name {quote(name)} --region us-east-1 "
+                "--query 'LoginProfile.CreateDate' "
                 "--output text",
-                f"aws iam list-mfa-devices --user-name {name} --region us-east-1 --query 'length(MFADevices)' "
+                f"aws iam list-mfa-devices --user-name {quote(name)} --region us-east-1 --query 'length(MFADevices)' "
                 "--output text",
             ],
         ))

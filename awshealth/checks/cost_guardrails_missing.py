@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_security import ANOMALY_MONITORS, BUDGET_HISTORY, BUDGETS, days_since, parse_ts
 from ..model import Claim, Finding
 from ..registry import check
@@ -31,7 +33,7 @@ def run(snap, ctx):
     problems_en, problems_pt, claims, verify = [], [], [], []
     if snap.status(BUDGETS, region) == "ok":
         budgets = [b for b in snap.items(BUDGETS, region) if b]
-        verify.append(f"aws budgets describe-budgets --account-id {ctx.account_id} --region us-east-1 --query "
+        verify.append(f"aws budgets describe-budgets --account-id {quote(ctx.account_id)} --region us-east-1 --query "
                       "'Budgets[].[BudgetName,BudgetLimit.Amount,CalculatedSpend.ActualSpend.Amount]' --output table")
         if not budgets:
             problems_en.append("the account has no AWS Budgets")

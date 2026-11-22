@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+from shlex import quote
 
 from ..calls_security import ACCOUNT_BPA, BUCKET_BPA, BUCKET_POLICY, BUCKETS, as_list
 from ..model import Claim, Finding
@@ -123,11 +124,11 @@ def run(snap, ctx):
                 "pt-BR": f"O bucket {bucket} deveria ser público, por exemplo um site estático?",
             },
             verify=[
-                f"aws s3api get-bucket-policy-status --bucket {bucket} --region us-east-1 --query "
+                f"aws s3api get-bucket-policy-status --bucket {quote(bucket)} --region us-east-1 --query "
                 "'PolicyStatus.IsPublic' --output text",
-                f"aws s3api get-public-access-block --bucket {bucket} --region us-east-1 --query "
+                f"aws s3api get-public-access-block --bucket {quote(bucket)} --region us-east-1 --query "
                 "'PublicAccessBlockConfiguration' --output table",
-                f"aws s3api get-bucket-policy --bucket {bucket} --region us-east-1 --query Policy --output text",
+                f"aws s3api get-bucket-policy --bucket {quote(bucket)} --region us-east-1 --query Policy --output text",
             ],
         ))
     return findings

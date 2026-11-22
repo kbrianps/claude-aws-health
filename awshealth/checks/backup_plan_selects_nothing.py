@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_security import (
     BACKUP_PLAN,
     BACKUP_PLANS,
@@ -61,8 +63,11 @@ def run(snap, ctx):
             want_txt = ", ".join(f"{k}={v}" for k, v in wanted)
             vaults = [v for v in plan_vaults.get(plan_id) or [] if isinstance(v, str)]
             empty = [v for v in vaults if vault_points.get(v) == 0]
-            vault_en = f" Target vault(s) with 0 recovery points: {', '.join(empty)}." if empty else ""
-            vault_pt = f" Cofre(s) de destino com 0 pontos de recuperação: {', '.join(empty)}." if empty else ""
+            one_vault = len(empty) == 1
+            vault_en = (f" Target {'vault' if one_vault else 'vaults'} with 0 recovery points: {', '.join(empty)}."
+                        if empty else "")
+            vault_pt = (f" {'Cofre' if one_vault else 'Cofres'} de destino com 0 pontos de recuperação: "
+                        f"{', '.join(empty)}." if empty else "")
             shown = misses[:5]
             miss_en = " Near misses: " + "; ".join(f"{arn} has {hit}" for arn, hit, _ in shown) + "." if shown else ""
             miss_pt = " Quase iguais: " + "; ".join(f"{arn} tem {hit}" for arn, hit, _ in shown) + "." if shown else ""
@@ -101,13 +106,16 @@ def run(snap, ctx):
                 },
                 claims=claims,
                 verify=[
-                    f"aws backup get-backup-selection --backup-plan-id {plan_id} --selection-id {sel.get('id')} "
-                    f"--region {region} --query 'BackupSelection.[ListOfTags,Conditions]' --output json",
-                    f"aws backup list-backup-jobs --by-backup-vault-name {vaults[0]} --region {region} --query "
+                    f"aws backup get-backup-selection --backup-plan-id {quote(plan_id)} "
+                    f"--selection-id {quote(sel.get('id'))} "
+                    f"--region {quote(region)} --query 'BackupSelection.[ListOfTags,Conditions]' --output json",
+                    f"aws backup list-backup-jobs --by-backup-vault-name {quote(vaults[0])} "
+                    f"--region {quote(region)} --query "
                     "'BackupJobs[].[ResourceArn,State,CreationDate]' --output table" if vaults else
-                    f"aws backup list-backup-jobs --region {region} --query "
+                    f"aws backup list-backup-jobs --region {quote(region)} --query "
                     "'BackupJobs[].[ResourceArn,State,CreationDate]' --output table",
-                    f"aws resourcegroupstaggingapi get-resources --region {region} --tag-filters Key={wanted[0][0]} "
+                    f"aws resourcegroupstaggingapi get-resources --region {quote(region)} "
+                    f"--tag-filters Key={quote(wanted[0][0])} "
                     "--query 'ResourceTagMappingList[].ResourceARN' --output text",
                 ],
             ))

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import re
+from shlex import quote
 
 from ..calls_security import ELB_CLASSIC, ELBV2, HOSTED_ZONES, RECORD_SETS
 from ..model import Claim, Finding
@@ -88,12 +90,15 @@ def run(snap, ctx):
                     "pt-BR": f"{target} é um load balancer em outra conta AWS?",
                 },
                 verify=[
-                    f"aws route53 list-resource-record-sets --hosted-zone-id {short_zone} --region us-east-1 --query "
-                    f"\"ResourceRecordSets[?Name=='{rec['name']}'].AliasTarget.DNSName\" --output text",
-                    f"aws elbv2 describe-load-balancers --region {region} --query "
-                    f"\"LoadBalancers[?DNSName=='{target}'].LoadBalancerArn\" --output text",
-                    f"aws elb describe-load-balancers --region {region} --query "
-                    f"\"LoadBalancerDescriptions[?DNSName=='{target}'].LoadBalancerName\" --output text",
+                    f"aws route53 list-resource-record-sets --hosted-zone-id {quote(short_zone)} "
+                    "--region us-east-1 --query "
+                    + quote(f"ResourceRecordSets[?Name==`{json.dumps(rec['name'])}`].AliasTarget.DNSName")
+                    + " --output text",
+                    f"aws elbv2 describe-load-balancers --region {quote(region)} --query "
+                    + quote(f"LoadBalancers[?DNSName==`{json.dumps(target)}`].LoadBalancerArn") + " --output text",
+                    f"aws elb describe-load-balancers --region {quote(region)} --query "
+                    + quote(f"LoadBalancerDescriptions[?DNSName==`{json.dumps(target)}`].LoadBalancerName")
+                    + " --output text",
                 ],
             ))
     return findings

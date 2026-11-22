@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from shlex import quote
+
 from ..calls_security import (
     BACKUP_PLANS,
     BACKUP_SELECTION,
@@ -16,6 +19,7 @@ from ..calls_security import (
 )
 from ..model import Claim, Finding
 from ..registry import check
+from . import counted
 
 CHECK_ID = "backup-not-covered"
 
@@ -68,8 +72,8 @@ def run(snap, ctx):
             prod = is_prod(tags, name)
             extra_en = extra_pt = ""
             if kind == "RDS instance":
-                extra_en = f" Automated backup retention is {claim.value} day(s)."
-                extra_pt = f" A retenção do backup automático é de {claim.value} dia(s)."
+                extra_en = f" Automated backup retention is {counted(claim.value, 'day', 'days')}."
+                extra_pt = f" A retenção do backup automático é de {counted(claim.value, 'dia', 'dias')}."
             elif kind == "DynamoDB table":
                 extra_en = " Point-in-time recovery is off."
                 extra_pt = " A recuperação point-in-time está desligada."
@@ -108,9 +112,9 @@ def run(snap, ctx):
                 owner_question={"en": f"Is {name} ephemeral or rebuilt from another source?",
                                 "pt-BR": f"{name} é temporário ou é recriado a partir de outra fonte?"},
                 verify=[
-                    f"aws backup list-protected-resources --region {region} --query "
-                    f"\"Results[?ResourceArn=='{arns[0]}'].LastBackupTime\" --output text",
-                    f"aws backup list-backup-plans --region {region} --query "
+                    f"aws backup list-protected-resources --region {quote(region)} --query "
+                    + quote(f"Results[?ResourceArn==`{json.dumps(arns[0])}`].LastBackupTime") + " --output text",
+                    f"aws backup list-backup-plans --region {quote(region)} --query "
                     "'BackupPlansList[].[BackupPlanName,BackupPlanId]' --output table",
                 ],
             ))

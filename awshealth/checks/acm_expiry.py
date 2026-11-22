@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_compute import CERTIFICATES, parse_time
 from ..model import Claim, Finding
 from ..registry import check
@@ -96,10 +98,10 @@ def run(snap, ctx):
                 ],
                 deadline="" if expired else not_after.isoformat(),
                 verify=[
-                    f"aws acm describe-certificate --certificate-arn {arn} --region {region} "
+                    f"aws acm describe-certificate --certificate-arn {quote(arn)} --region {quote(region)} "
                     "--query 'Certificate.[DomainName,Type,Status,NotAfter,RenewalEligibility,"
                     "RenewalSummary.RenewalStatus]' --output text",
-                    f"aws acm describe-certificate --certificate-arn {arn} --region {region} "
+                    f"aws acm describe-certificate --certificate-arn {quote(arn)} --region {quote(region)} "
                     "--query 'Certificate.InUseBy' --output text",
                 ],
             ))

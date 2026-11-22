@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_compute import RDS_CLUSTERS, RDS_INSTANCES, RDS_MAJOR_VERSIONS, parse_time
 from ..model import Claim, Finding
 from ..prices import HOURS_PER_MONTH, price, source
@@ -129,7 +131,10 @@ def _evaluate(snap, ctx, region, kind, db, vcpu, classes, majors):
         deadline = ext_end
     else:
         deadline = None
-    notes = [f"Rate {rate_key} is the us-east-1 list price for RDS for PostgreSQL; other engines and regions differ."]
+    notes = [{"en": f"Rate {rate_key} is the us-east-1 list price for RDS for PostgreSQL; other engines and regions "
+                   "differ.",
+              "pt-BR": f"A tarifa {rate_key} é o preço de lista do RDS for PostgreSQL em us-east-1; outros motores e "
+                       "regiões têm preços diferentes."}]
     if monthly is None and billed:
         notes.append("vCPU count unknown for this instance class, no dollar figure.")
     describe = ("aws rds describe-db-clusters --db-cluster-identifier" if kind == "cluster"
@@ -175,12 +180,13 @@ def _evaluate(snap, ctx, region, kind, db, vcpu, classes, majors):
         confidence="medium" if monthly is not None else "high",
         notes=notes,
         verify=[
-            f"{describe} {name} --region {region} "
+            f"{describe} {quote(name)} --region {quote(region)} "
             f"--query '{root}[].[Engine,EngineVersion,EngineLifecycleSupport]' --output table",
-            f"aws rds describe-db-major-engine-versions --engine {engine} --major-engine-version {major} "
-            f"--region {region} --query 'DBMajorEngineVersions[].SupportedEngineLifecycles[]."
+            f"aws rds describe-db-major-engine-versions --engine {quote(engine)} --major-engine-version {quote(major)} "
+            f"--region {quote(region)} --query 'DBMajorEngineVersions[].SupportedEngineLifecycles[]."
             "[LifecycleSupportName,LifecycleSupportStartDate,LifecycleSupportEndDate]' --output table",
-            f"aws rds describe-pending-maintenance-actions --filters Name={pm_filter},Values={arn} --region {region} "
+            f"aws rds describe-pending-maintenance-actions --filters Name={pm_filter},Values={quote(arn)} "
+            f"--region {quote(region)} "
             "--query 'PendingMaintenanceActions[].PendingMaintenanceActionDetails[]."
             "[Action,AutoAppliedAfterDate,ForcedApplyDate]' --output table",
         ],

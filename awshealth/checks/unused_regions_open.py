@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_compute import (
     ECS_CLUSTERS,
     FUNCTIONS,
@@ -82,8 +84,9 @@ def run(snap, ctx):
         claims=[Claim(f"guardduty:ListDetectors@{r}", "DetectorIds", []) for r in empty]
         + [Claim(f"{name}@{r}", "count", 0) for r in empty[:3] for name in INVENTORY],
         verify=[
-            f"aws guardduty list-detectors --region {first} --query 'DetectorIds' --output text",
-            f"aws ec2 describe-instances --region {first} --query 'length(Reservations[].Instances[])' --output text",
+            f"aws guardduty list-detectors --region {quote(first)} --query 'DetectorIds' --output text",
+            f"aws ec2 describe-instances --region {quote(first)} --query 'length(Reservations[].Instances[])' "
+            "--output text",
             "aws account list-regions --region us-east-1 --region-opt-status-contains ENABLED ENABLED_BY_DEFAULT "
             "--query 'Regions[].RegionName' --output text",
         ],

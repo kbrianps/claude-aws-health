@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+from shlex import quote
+
 from ..calls_security import ALARMS, TOPIC_ATTRS, TOPICS, is_prod, per_item_error
 from ..model import Claim, Finding
 from ..registry import check
+from . import counted
 
 CHECK_ID = "sns-alarm-topic-no-subscribers"
 
@@ -41,20 +45,24 @@ def run(snap, ctx):
         prod = is_prod(None, topic_name, *alarms)
         names = ", ".join(alarms[:5]) + (f" and {len(alarms) - 5} more" if len(alarms) > 5 else "")
         names_pt = ", ".join(alarms[:5]) + (f" e mais {len(alarms) - 5}" if len(alarms) > 5 else "")
+        send_en = counted(len(alarms), "alarm sends", "alarms send")
+        send_pt = counted(len(alarms), "alarme envia", "alarmes enviam")
+        notify_en = counted(len(alarms), "alarm notifies", "alarms notify")
+        notify_pt = counted(len(alarms), "alarme avisa", "alarmes avisam")
         if missing:
-            what_en = f"{len(alarms)} alarm(s) send to {topic_name}, which does not exist in {region}: {names}."
-            what_pt = f"{len(alarms)} alarme(s) enviam para {topic_name}, que não existe em {region}: {names_pt}."
-            title_en = f"{len(alarms)} alarm(s) notify SNS topic {topic_name}, which no longer exists"
-            title_pt = f"{len(alarms)} alarme(s) avisam o tópico SNS {topic_name}, que não existe mais"
+            what_en = f"{send_en} to {topic_name}, which does not exist in {region}: {names}."
+            what_pt = f"{send_pt} para {topic_name}, que não existe em {region}: {names_pt}."
+            title_en = f"{notify_en} SNS topic {topic_name}, which no longer exists"
+            title_pt = f"{notify_pt} o tópico SNS {topic_name}, que não existe mais"
         else:
-            pend_en = f" {pending} subscription(s) are still pending confirmation." if pending else ""
-            pend_pt = f" {pending} inscrição(ões) ainda aguardam confirmação." if pending else ""
-            what_en = (f"{len(alarms)} alarm(s) send to {topic_name}, which has 0 confirmed subscriptions: "
-                       f"{names}.{pend_en}")
-            what_pt = (f"{len(alarms)} alarme(s) enviam para {topic_name}, que tem 0 inscrições confirmadas: "
-                       f"{names_pt}.{pend_pt}")
-            title_en = f"{len(alarms)} alarm(s) notify SNS topic {topic_name}, which has no confirmed subscribers"
-            title_pt = f"{len(alarms)} alarme(s) avisam o tópico SNS {topic_name}, que não tem inscritos confirmados"
+            pend_en = (f" {counted(pending, 'subscription is', 'subscriptions are')} still pending confirmation."
+                       if pending else "")
+            pend_pt = (f" {counted(pending, 'inscrição ainda aguarda', 'inscrições ainda aguardam')} confirmação."
+                       if pending else "")
+            what_en = f"{send_en} to {topic_name}, which has 0 confirmed subscriptions: {names}.{pend_en}"
+            what_pt = f"{send_pt} para {topic_name}, que tem 0 inscrições confirmadas: {names_pt}.{pend_pt}"
+            title_en = f"{notify_en} SNS topic {topic_name}, which has no confirmed subscribers"
+            title_pt = f"{notify_pt} o tópico SNS {topic_name}, que não tem inscritos confirmados"
         claims = [Claim(f"cloudwatch:DescribeAlarms@{region}", ("MetricAlarms[?contains(AlarmActions, "
                                                                 f"'{topic}')].AlarmName"), alarms)]
         if missing:
@@ -88,10 +96,10 @@ def run(snap, ctx):
             },
             claims=claims,
             verify=[
-                (f"aws sns get-topic-attributes --topic-arn {topic} --region {region} --query "
+                (f"aws sns get-topic-attributes --topic-arn {quote(topic)} --region {quote(region)} --query "
                  "'Attributes.[SubscriptionsConfirmed,SubscriptionsPending]' --output text"),
-                (f"aws cloudwatch describe-alarms --region {region} --query \"MetricAlarms[?contains(AlarmActions, "
-                 f"'{topic}')].AlarmName\" --output text"),
+                (f"aws cloudwatch describe-alarms --region {quote(region)} --query "
+                 + quote(f"MetricAlarms[?contains(AlarmActions, `{json.dumps(topic)}`)].AlarmName") + " --output text"),
             ],
         ))
     return findings

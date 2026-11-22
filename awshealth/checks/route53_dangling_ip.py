@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import ipaddress
+import json
+from shlex import quote
 
 from ..calls_core import IP_RANGES
 from ..calls_security import ADDRESSES, ENI_PUBLIC_IPS, HOSTED_ZONES, RECORD_SETS
@@ -110,13 +112,15 @@ def run(snap, ctx):
                         "pt-BR": f"O IP {value} pertence a outra conta AWS sua ou a um parceiro?",
                     },
                     verify=[
-                        (f"aws route53 list-resource-record-sets --hosted-zone-id {short_zone} --region us-east-1 "
-                         f"--query \"ResourceRecordSets[?Name=='{rec['name']}' && "
-                         "Type=='A'].ResourceRecords[].Value\" --output text"),
-                        (f"aws ec2 describe-addresses --region {region} --filters Name=public-ip,Values={value} "
+                        (f"aws route53 list-resource-record-sets --hosted-zone-id {quote(short_zone)} "
+                         "--region us-east-1 "
+                         "--query " + quote(f"ResourceRecordSets[?Name==`{json.dumps(rec['name'])}` && "
+                                            "Type==`\"A\"`].ResourceRecords[].Value") + " --output text"),
+                        (f"aws ec2 describe-addresses --region {quote(region)} "
+                         f"--filters Name=public-ip,Values={quote(value)} "
                          "--query 'Addresses[].AllocationId' --output text"),
-                        (f"aws ec2 describe-network-interfaces --region {region} --filters "
-                         f"Name=association.public-ip,Values={value} --query "
+                        (f"aws ec2 describe-network-interfaces --region {quote(region)} --filters "
+                         f"Name=association.public-ip,Values={quote(value)} --query "
                          "'NetworkInterfaces[].NetworkInterfaceId' --output text"),
                     ],
                 ))

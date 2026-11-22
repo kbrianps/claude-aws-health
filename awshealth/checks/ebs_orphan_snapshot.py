@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_compute import IMAGES, SNAPSHOTS, VOLUMES, tag_map
 from ..model import Claim, Finding
 from ..prices import price, source
 from ..registry import check
+from . import counted
 
 DLM_TAG = "aws:dlm:lifecycle-policy-id"
 BACKUP_TAG = "aws:backup:source-resource"
@@ -44,7 +47,7 @@ def run(snap, ctx):
         archive = sum(1 for s in orphans if s.get("tier") == "archive")
         archive_en = f" {archive} of them are in the archive tier, which has a 90-day minimum." if archive else ""
         archive_pt = f" {archive} deles estão na camada archive, que tem mínimo de 90 dias." if archive else ""
-        ids = " ".join(s["id"] for s in top[:5])
+        ids = " ".join(quote(s["id"]) for s in top[:5])
         vol_ids = ",".join(sorted({s.get("volume") or "vol-ffffffff" for s in top[:5]}))
         snap_csv = ",".join(s["id"] for s in top[:5])
         plural = "s" if len(orphans) > 1 else ""
@@ -59,10 +62,13 @@ def run(snap, ctx):
                 "en": {
                     "title": f"{len(orphans)} EBS snapshot{plural} in {region} with no source volume, AMI or "
                              "backup policy",
-                    "what": f"{len(orphans)} self-owned snapshots ({total_gb} GiB of volume size) point at volumes "
-                            f"that no longer exist and are not used by any self-owned AMI, DLM or AWS Backup. "
-                            f"Largest: {top_list}.{archive_en}",
-                    "risk": f"They bill up to about US${monthly:,.2f}/month. Snapshots are incremental, so the real "
+                    "what": f"{counted(len(orphans), 'self-owned snapshot', 'self-owned snapshots')} ({total_gb} GiB "
+                            "of volume size) "
+                            + ("points at a volume that no longer exists and is" if len(orphans) == 1
+                               else "point at volumes that no longer exist and are")
+                            + f" not used by any self-owned AMI, DLM or AWS Backup. Largest: {top_list}.{archive_en}",
+                    "risk": f"{'It bills' if len(orphans) == 1 else 'They bill'} up to about US${monthly:,.2f}/month. "
+                            "Snapshots are incremental, so the real "
                             "figure can be lower.",
                     "fix": "Confirm with the owner that none is a final backup kept for compliance or a DR copy, "
                            "then delete them or move the keepers to the archive tier.",
@@ -70,10 +76,13 @@ def run(snap, ctx):
                 "pt-BR": {
                     "title": f"{len(orphans)} snapshot{plural} EBS em {region} sem volume de origem, AMI nem política "
                              "de backup",
-                    "what": f"{len(orphans)} snapshots da conta ({total_gb} GiB de tamanho de volume) apontam para "
-                            f"volumes que não existem mais e não são usados por nenhuma AMI da conta, DLM ou AWS "
-                            f"Backup. Maiores: {top_list}.{archive_pt}",
-                    "risk": f"Eles custam até cerca de US$ {monthly:,.2f}/mês. Snapshots são incrementais, então o "
+                    "what": f"{counted(len(orphans), 'snapshot da conta', 'snapshots da conta')} ({total_gb} GiB de "
+                            "tamanho de volume) "
+                            + ("aponta para um volume que não existe mais e não é usado" if len(orphans) == 1
+                               else "apontam para volumes que não existem mais e não são usados")
+                            + f" por nenhuma AMI da conta, DLM ou AWS Backup. Maiores: {top_list}.{archive_pt}",
+                    "risk": f"{'Ele custa' if len(orphans) == 1 else 'Eles custam'} até cerca de "
+                            f"US$ {monthly:,.2f}/mês. Snapshots são incrementais, então o "
                             "valor real pode ser menor.",
                     "fix": "Confirmar com o dono que nenhum é backup final guardado por compliance ou cópia de DR, "
                            "depois apagar ou mover os que ficam para a camada archive.",
@@ -85,19 +94,22 @@ def run(snap, ctx):
             usd_calc=f"upper bound: {total_gb} GiB x US${gb_price}/GB-month = US${monthly:,.2f}/month; snapshots "
                      f"are incremental, so billed size can be lower ({source('ebs_snapshot_gb_month')})",
             owner_question={
-                "en": f"Are any of the {len(orphans)} orphan snapshots in {region} a final backup kept for "
-                      "compliance or legal reasons, or a copy for disaster recovery?",
-                "pt-BR": f"Algum dos {len(orphans)} snapshots órfãos em {region} é backup final guardado por "
-                         "compliance ou motivo legal, ou cópia para recuperação de desastre?",
+                "en": ("Is the orphan snapshot" if len(orphans) == 1
+                       else f"Are any of the {len(orphans)} orphan snapshots")
+                + f" in {region} a final backup kept for compliance or legal reasons, or a copy for disaster recovery?",
+                "pt-BR": ("O snapshot órfão" if len(orphans) == 1
+                          else f"Algum dos {len(orphans)} snapshots órfãos")
+                + f" em {region} é backup final guardado por compliance ou motivo legal, ou cópia para recuperação "
+                  "de desastre?",
             },
             confidence="medium",
             verify=[
-                f"aws ec2 describe-snapshots --owner-ids self --snapshot-ids {ids} --region {region} "
+                f"aws ec2 describe-snapshots --owner-ids self --snapshot-ids {ids} --region {quote(region)} "
                 "--query 'Snapshots[].[SnapshotId,VolumeId,VolumeSize,StartTime,StorageTier]' --output table",
-                f"aws ec2 describe-volumes --filters Name=volume-id,Values={vol_ids} --region {region} "
+                f"aws ec2 describe-volumes --filters Name=volume-id,Values={quote(vol_ids)} --region {quote(region)} "
                 "--query 'Volumes[].VolumeId' --output text",
                 f"aws ec2 describe-images --owners self --include-deprecated --include-disabled "
-                f"--filters Name=block-device-mapping.snapshot-id,Values={snap_csv} --region {region} "
+                f"--filters Name=block-device-mapping.snapshot-id,Values={quote(snap_csv)} --region {quote(region)} "
                 "--query 'Images[].ImageId' --output text",
             ],
         ))

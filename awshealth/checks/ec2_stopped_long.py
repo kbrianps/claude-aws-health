@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from shlex import quote
 
 from ..calls_compute import ADDRESSES, INSTANCES, VOLUMES, ebs_gb_month, tag_map
 from ..model import Claim, Finding
 from ..prices import HOURS_PER_MONTH, price, source
 from ..registry import check
+from . import counted
 
 STOP_RE = re.compile(r"\((\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) GMT\)")
 MIN_DAYS = 30
@@ -59,11 +61,17 @@ def run(snap, ctx):
             total_gb = sum(v.get("size") or 0 for v in vols)
             name = tags.get("Name")
             label = f"{iid} ({name})" if name else iid
-            cost_en = f" Its {len(vols)} volumes ({total_gb} GiB)" + (f" and {len(ips)} Elastic IPs" if ips else "") \
-                + (f" still cost about US${monthly:,.2f}/month." if monthly is not None else " still bill storage.")
-            cost_pt = f" Os {len(vols)} volumes dela ({total_gb} GiB)" + (f" e {len(ips)} Elastic IPs" if ips else "") \
-                + (f" ainda custam cerca de US$ {monthly:,.2f}/mês." if monthly is not None
-                   else " ainda cobram armazenamento.")
+            one = len(vols) + len(ips) == 1
+            ips_en = f" and {counted(len(ips), 'Elastic IP', 'Elastic IPs')}" if ips else ""
+            ips_pt = f" e {counted(len(ips), 'Elastic IP', 'Elastic IPs')}" if ips else ""
+            cost_en = (" Its volume" if len(vols) == 1 else f" Its {len(vols)} volumes") \
+                + f" ({total_gb} GiB){ips_en}" \
+                + (f" still {'costs' if one else 'cost'} about US${monthly:,.2f}/month." if monthly is not None
+                   else f" still {'bills' if one else 'bill'} storage.")
+            cost_pt = (" O volume dela" if len(vols) == 1 else f" Os {len(vols)} volumes dela") \
+                + f" ({total_gb} GiB){ips_pt}" \
+                + (f" ainda {'custa' if one else 'custam'} cerca de US$ {monthly:,.2f}/mês." if monthly is not None
+                   else f" ainda {'cobra' if one else 'cobram'} armazenamento.")
             findings.append(Finding(
                 check_id="ec2-stopped-long",
                 resource=f"arn:aws:ec2:{region}:{snap.account_id}:instance/{iid}",
@@ -100,15 +108,17 @@ def run(snap, ctx):
                     "pt-BR": f"A instância {label} está parada há {days} dias. Ela é standby de DR, máquina sazonal ou "
                              "presa a uma licença, ou pode virar AMI e ser terminada?",
                 },
-                notes=[f"Volume types without a price: {', '.join(unknown)}."] if unknown else [],
+                notes=[{"en": f"Volume types without a price: {', '.join(unknown)}.",
+                        "pt-BR": f"Tipos de volume sem preço: {', '.join(unknown)}."}] if unknown else [],
                 verify=[
-                    f"aws ec2 describe-instances --instance-ids {iid} --region {region} "
+                    f"aws ec2 describe-instances --instance-ids {quote(iid)} --region {quote(region)} "
                     "--query 'Reservations[].Instances[].[InstanceId,State.Name,StateTransitionReason,InstanceType]' "
                     "--output table",
-                    f"aws ec2 describe-volumes --filters Name=attachment.instance-id,Values={iid} --region {region} "
+                    f"aws ec2 describe-volumes --filters Name=attachment.instance-id,Values={quote(iid)} "
+                    f"--region {quote(region)} "
                     "--query 'Volumes[].[VolumeId,Size,VolumeType]' --output table",
-                    f"aws cloudtrail lookup-events --region {region} "
-                    f"--lookup-attributes AttributeKey=ResourceName,AttributeValue={iid} --max-results 5 "
+                    f"aws cloudtrail lookup-events --region {quote(region)} "
+                    f"--lookup-attributes AttributeKey=ResourceName,AttributeValue={quote(iid)} --max-results 5 "
                     "--query 'Events[].[EventTime,EventName,Username]' --output table",
                 ],
             ))

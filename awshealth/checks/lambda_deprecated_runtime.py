@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from shlex import quote
 
 from ..calls_compute import FUNCTIONS
 from ..model import Claim, Finding
@@ -86,9 +87,10 @@ def run(snap, ctx):
                 + [Claim("lambda-runtimes", runtime, row | {"source": TABLE["source"]})],
                 deadline=deadline.isoformat() if deadline else "",
                 verify=[
-                    f"aws lambda list-functions --region {region} "
-                    f"--query \"Functions[?Runtime=='{runtime}'].[FunctionName,Runtime,LastModified]\" --output table",
-                    f"aws lambda list-layers --compatible-runtime {runtime} --region {region} "
+                    f"aws lambda list-functions --region {quote(region)} "
+                    "--query " + quote(f"Functions[?Runtime==`{json.dumps(runtime)}`]"
+                                       ".[FunctionName,Runtime,LastModified]") + " --output table",
+                    f"aws lambda list-layers --compatible-runtime {quote(runtime)} --region {quote(region)} "
                     "--query 'Layers[].[LayerName,LatestMatchingVersion.Version]' --output table",
                 ],
             ))

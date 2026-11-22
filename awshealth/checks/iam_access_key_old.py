@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_security import ACCESS_KEYS, KEY_LAST_USED, USERS, days_since
 from ..model import Claim, Finding
 from ..registry import check
@@ -79,9 +81,9 @@ def run(snap, ctx):
                              "pt-BR": f"As chaves sem uso de {name} servem a alguma rotina trimestral ou anual?"}
                             if unused else {}),
             verify=[
-                f"aws iam list-access-keys --user-name {name} --region us-east-1 --query "
+                f"aws iam list-access-keys --user-name {quote(name)} --region us-east-1 --query "
                 "'AccessKeyMetadata[].[AccessKeyId,Status,CreateDate]' --output table",
-            ] + [f"aws iam get-access-key-last-used --access-key-id {kid} --region us-east-1 --query "
+            ] + [f"aws iam get-access-key-last-used --access-key-id {quote(kid)} --region us-east-1 --query "
                  "'AccessKeyLastUsed.[LastUsedDate,ServiceName]' --output text"
                  for kid, _ in (unused or old)[:2]],
         ))

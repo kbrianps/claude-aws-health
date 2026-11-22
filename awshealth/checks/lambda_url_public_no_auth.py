@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_security import FUNCTION_URLS, FUNCTIONS
 from ..model import Claim, Finding
 from ..registry import check
@@ -62,9 +64,11 @@ def run(snap, ctx):
                     owner_question={"en": f"Is {name} a public webhook that checks a signature in its code?",
                                     "pt-BR": f"{name} é um webhook público que valida assinatura no código?"},
                     verify=[
-                        (f"aws lambda list-function-url-configs --function-name {name} --region {region} --query "
+                        (f"aws lambda list-function-url-configs --function-name {quote(name)} "
+                         f"--region {quote(region)} --query "
                          "'FunctionUrlConfigs[].[FunctionUrl,AuthType]' --output table"),
-                        (f"aws lambda list-function-url-configs --function-name {name} --region {region} --query "
+                        (f"aws lambda list-function-url-configs --function-name {quote(name)} "
+                         f"--region {quote(region)} --query "
                          "'FunctionUrlConfigs[].Cors.AllowOrigins' --output text"),
                     ],
                 ))

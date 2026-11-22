@@ -84,3 +84,16 @@ def test_org_trail_with_unreadable_status_counts_as_logging():
                                                  "org": True}])
     snap.put(TRAIL_STATUS, "us-east-1", "ok", by_id={TRAIL: {"__error__": "TrailNotFoundException"}})
     assert run_one("detective-controls-off", snap) == []
+
+
+def test_single_workload_and_single_trail_texts_are_singular():
+    snap = base()
+    snap.put(GD_DETECTORS, "sa-east-1", "ok", value=[])
+    [f] = run_one("detective-controls-off", snap)
+    assert "runs 1 workload with" in f.t("title")
+    assert "roda 1 carga com" in f.t("title", "pt-BR")
+    snap = base()
+    snap.put(TRAIL_STATUS, "us-east-1", "ok", by_id={TRAIL: {"logging": False}})
+    [f] = run_one("detective-controls-off", snap)
+    assert f.t("what") == "The only multi-region trail is not logging."
+    assert f.t("what", "pt-BR") == "A única trilha multi-região não está registrando."

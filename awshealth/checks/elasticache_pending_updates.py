@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shlex import quote
+
 from ..calls_compute import CACHE_UPDATE_ACTIONS, parse_time
 from ..model import Claim, Finding
 from ..registry import check
@@ -83,7 +85,7 @@ def run(snap, ctx):
                         for a in actions],
                 deadline=first.isoformat() if first else "",
                 verify=[
-                    f"aws elasticache describe-update-actions {flag} {rid} --region {region} "
+                    f"aws elasticache describe-update-actions {flag} {quote(rid)} --region {quote(region)} "
                     "--update-action-status not-applied waiting-to-start in-progress "
                     "--query 'UpdateActions[].[ServiceUpdateName,ServiceUpdateSeverity,UpdateActionStatus,"
                     "ServiceUpdateRecommendedApplyByDate]' --output table",

@@ -22,7 +22,8 @@ HOSTED_ZONES = call("route53", "ListHostedZones",
                     keep="HostedZones[].{id: Id, name: Name, private: Config.PrivateZone}",
                     result_key="HostedZones", scope="global")
 RECORD_SETS = call("route53", "ListResourceRecordSets",
-                   keep="ResourceRecordSets[].{name: Name, type: Type, ttl: TTL, set_id: SetIdentifier, "
+                   keep="ResourceRecordSets[?AliasTarget || contains(['A', 'AAAA', 'CNAME'], Type)]"
+                        ".{name: Name, type: Type, ttl: TTL, set_id: SetIdentifier, "
                         "values: ResourceRecords[].Value, alias: AliasTarget}",
                    result_key="ResourceRecordSets", scope="global",
                    per_item=("route53", "ListHostedZones", "[].id", "HostedZoneId"))

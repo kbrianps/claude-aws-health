@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import re
+from shlex import quote
 
 from ..calls_security import ALARMS, days_since
 from ..model import Claim, Finding
 from ..registry import check
+from . import counted
 
 CHECK_ID = "cloudwatch-alarm-stuck"
 _HEARTBEAT = re.compile(r"heartbeat|watchdog|deadman|canary", re.I)
@@ -54,8 +56,10 @@ def run(snap, ctx):
             region=region,
             text={
                 "en": {
-                    "title": f"{len(stuck)} CloudWatch alarm(s) in {region} stuck for over 30 days",
-                    "what": f"{alarm} alarm(s) have been in ALARM and {nodata} in INSUFFICIENT_DATA for over 30 "
+                    "title": f"{counted(len(stuck), 'CloudWatch alarm', 'CloudWatch alarms')} in {region} stuck for "
+                             "over 30 days",
+                    "what": f"{counted(alarm, 'alarm has', 'alarms have')} been in ALARM and {nodata} in "
+                            "INSUFFICIENT_DATA for over 30 "
                             f"days: {sample}{more_en}.",
                     "risk": "Alarms that never change train people to ignore them, and INSUFFICIENT_DATA often "
                             "means the watched resource was deleted, so real failures go unnoticed.",
@@ -63,8 +67,10 @@ def run(snap, ctx):
                            "watch deleted resources.",
                 },
                 "pt-BR": {
-                    "title": f"{len(stuck)} alarme(s) do CloudWatch em {region} parados há mais de 30 dias",
-                    "what": f"{alarm} alarme(s) estão em ALARM e {nodata} em INSUFFICIENT_DATA há mais de 30 dias: "
+                    "title": f"{counted(len(stuck), 'alarme do CloudWatch', 'alarmes do CloudWatch')} em {region} "
+                             f"{'parado' if len(stuck) == 1 else 'parados'} há mais de 30 dias",
+                    "what": f"{counted(alarm, 'alarme está', 'alarmes estão')} em ALARM e {nodata} em "
+                            "INSUFFICIENT_DATA há mais de 30 dias: "
                             f"{sample_pt}{more_pt}.",
                     "risk": "Alarmes que nunca mudam ensinam as pessoas a ignorá-los, e INSUFFICIENT_DATA muitas "
                             "vezes indica que o recurso observado foi apagado, então falhas reais passam batido.",
@@ -75,9 +81,9 @@ def run(snap, ctx):
             claims=[Claim(f"cloudwatch:DescribeAlarms@{region}", f"{a['name']}.StateUpdatedTimestamp", a.get("updated"))
                     for a, _ in stuck[:10]],
             verify=[
-                f"aws cloudwatch describe-alarms --region {region} --state-value ALARM --query "
+                f"aws cloudwatch describe-alarms --region {quote(region)} --state-value ALARM --query "
                 "'MetricAlarms[].[AlarmName,StateUpdatedTimestamp]' --output table",
-                f"aws cloudwatch describe-alarms --region {region} --state-value INSUFFICIENT_DATA --query "
+                f"aws cloudwatch describe-alarms --region {quote(region)} --state-value INSUFFICIENT_DATA --query "
                 "'MetricAlarms[].[AlarmName,StateUpdatedTimestamp,TreatMissingData]' --output table",
             ],
         ))
