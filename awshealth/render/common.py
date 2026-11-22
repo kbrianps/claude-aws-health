@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -11,10 +11,13 @@ from .. import __version__
 from ..adjust import Killed, apply
 from ..catalog import catalog_coverage
 from ..model import SEVERITIES, Finding
+from .i18n import strings
 
 CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 OWNER_KEYS = ("owner", "team", "contact", "maintainer", "squad")
 PROBLEM_STATUSES = ("denied", "throttled", "error")
+DEADLINE_WINDOW_DAYS = 45
+COH = "cost-optimization-hub"
 
 
 @dataclass
@@ -72,9 +75,29 @@ def sev_rank(sev: str) -> int:
     return SEVERITIES.index(sev) if sev in SEVERITIES else len(SEVERITIES)
 
 
-def rank_key(f: Finding) -> tuple:
+def rank_key(f: Finding, now: datetime) -> tuple:
     d = parse_ts(f.deadline)
-    return (sev_rank(f.severity), -(f.monthly_usd or 0), d.timestamp() if d else float("inf"), f.uid)
+    rest = (sev_rank(f.severity), -(f.monthly_usd or 0), -len(f.resources), f.uid)
+    if d and now <= d <= now + timedelta(days=DEADLINE_WINDOW_DAYS):
+        return (0, d.timestamp(), *rest)
+    return (1 if f.severity in ("critical", "high") else 2, 0, *rest)
+
+
+def note_lines(f: Finding, lang: str) -> list[str]:
+    s = strings(lang)
+    out = []
+    for n in f.notes:
+        if isinstance(n, dict) and n.get("verdict"):
+            label = s.get("review_" + str(n["verdict"]), str(n["verdict"]))
+            if n.get("from") and n.get("to"):
+                change = s["review_change"].replace("{from}", s.get("sev_" + n["from"], n["from"]))
+                label += " (" + change.replace("{to}", s.get("sev_" + n["to"], n["to"])) + ")"
+            out.append(f"{label}: {n.get('reason', '')}")
+        elif isinstance(n, dict):
+            out.append(n.get(lang) or n.get("en", ""))
+        else:
+            out.append(n)
+    return [n for n in out if n]
 
 
 def owner_text(f: Finding, lang: str) -> str:
@@ -153,20 +176,21 @@ def load_run(run_dir: Path, now: datetime | None = None) -> Run:
     run_dir = Path(run_dir)
     findings = _load_findings(run_dir)
     kept, killed, questions = apply(findings, run_dir / "adjustments.jsonl")
-    kept.sort(key=rank_key)
     meta, problems = _snapshot(run_dir)
+    now = now or parse_ts(meta.get("collected_at", "")) or datetime.now(timezone.utc)
+    kept.sort(key=lambda f: rank_key(f, now))
     calls, blocked = _ledger(run_dir)
     return Run(
         path=run_dir,
         meta=meta,
         findings=kept,
         killed=killed,
-        questions=sorted(questions, key=rank_key),
+        questions=sorted(questions, key=lambda f: rank_key(f, now)),
         coverage=catalog_coverage(run_dir),
         api_problems=problems,
         calls=calls,
         blocked=blocked,
-        now=now or datetime.now(timezone.utc),
+        now=now,
         sources=sorted({f.source for f in kept}),
         regions=sorted({f.region for f in kept}),
     )
@@ -179,7 +203,12 @@ def nearest_deadline(run: Run) -> Finding | None:
 
 
 def total_usd(run: Run) -> float:
-    return round(sum(f.monthly_usd or 0 for f in run.findings), 2)
+    return round(sum(f.monthly_usd or 0 for f in run.findings if f.source != COH), 2)
+
+
+def coh_usd(run: Run) -> float:
+    covered = {r for f in run.findings if f.source != COH for r in [f.resource, *f.resources]}
+    return round(sum(f.monthly_usd or 0 for f in run.findings if f.source == COH and f.resource not in covered), 2)
 
 
 def high_count(run: Run) -> int:

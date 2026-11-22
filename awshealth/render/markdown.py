@@ -8,18 +8,20 @@ from .common import (
     Run,
     by_owner,
     cap,
+    coh_usd,
     dated,
     days_until,
     fmt_usd,
     high_count,
     nearest_deadline,
+    note_lines,
     owner_text,
     total_usd,
     utc_text,
 )
 from .i18n import strings
 
-START_HERE = 5
+START_HERE = 7
 
 
 def md(value, n: int = 2000) -> str:
@@ -70,9 +72,11 @@ def kpi_lines(run: Run, s: dict, lang: str) -> list[str]:
     else:
         deadline = s["kpi_deadline_none"]
     cov = run.coverage
+    coh = coh_usd(run)
     return [
         f"- {s['kpi_deadline']}: {deadline}",
         f"- {s['kpi_usd']}: {fmt_usd(total_usd(run), lang)} ({s['kpi_usd_note'].lower()})",
+        *([f"- {s['kpi_coh']}: {fmt_usd(coh, lang)} ({s['kpi_coh_note']})"] if coh else []),
         f"- {s['kpi_high']}: {high_count(run)}",
         f"- {s['kpi_coverage']}: {cov['checked']}/{cov['total']}",
     ]
@@ -100,7 +104,7 @@ def finding_lines(f, run: Run, s: dict, lang: str) -> list[str]:
         out.append(f"- {s['cost']}: {fmt_usd(f.monthly_usd, lang)}{s['per_month']}{calc}")
     if owner_text(f, lang):
         out.append(f"- {s['owner_question']}: {cell(owner_text(f, lang), 1000)}")
-    for note in f.notes[:20]:
+    for note in note_lines(f, lang)[:20]:
         out.append(f"- {s['notes']}: {cell(note, 600)}")
     for c in f.claims[:20]:
         value = c.value if isinstance(c.value, str) else json.dumps(c.value, default=str, ensure_ascii=False)

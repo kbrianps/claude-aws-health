@@ -6,6 +6,7 @@ import pytest
 
 from awshealth.model import Claim, Finding
 from awshealth.render import render_all
+from awshealth.render.common import load_run, rank_key
 
 NOW = datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc)
 EVIL = "<script>alert(1)</script>"
@@ -100,7 +101,8 @@ def test_html_sections_and_kpis(run_dir):
     doc = (run_dir / "report.html").read_text("ascii")
     for sid in ("start", "inventory", "killed", "questions", "deadlines", "coverage"):
         assert f'id="{sid}"' in doc
-    assert "US$1,569" in doc
+    assert "US$369" in doc and "US$1,569" not in doc
+    assert "Cost Optimization Hub estimate: US$1,200" in doc
     assert "3 API calls recorded" in doc and "0 calls outside the allowlist" in doc
     assert "Kubernetes PVC with Retain" in doc
     assert "ec2:DescribeVolumes" in doc and "throttled" in doc
@@ -156,3 +158,111 @@ def test_renders_an_empty_run(tmp_path):
     paths = render_all(tmp_path, now=NOW)
     assert all(p.exists() for p in paths)
     assert "No ledger found" in (tmp_path / "report.html").read_text("ascii")
+
+
+def plain(check_id, severity="high", deadline="", usd=None, n=1, source="awshealth", resource=None):
+    resource = resource or f"arn:aws:ec2:us-east-1:111122223333:thing/{check_id}"
+    return Finding(check_id=check_id, resource=resource, severity=severity, category="cost", region="us-east-1",
+                   text=text(f"t {check_id}"), deadline=deadline, monthly_usd=usd, source=source,
+                   resources=[resource] + [f"{resource}-{i}" for i in range(1, n)])
+
+
+def test_rank_puts_near_deadlines_first_then_risk_then_money_then_size():
+    fs = [
+        plain("low-cheap", "low", usd=1.0),
+        plain("high-small", "high"),
+        plain("high-wide", "high", n=5),
+        plain("high-paid", "high", usd=10.0),
+        plain("critical", "critical"),
+        plain("medium-soon", "medium", deadline="2026-02-10T00:00:00+00:00"),
+        plain("high-sooner", "high", deadline="2026-02-01T00:00:00+00:00"),
+        plain("high-far", "high", deadline="2026-06-01T00:00:00+00:00"),
+        plain("high-passed", "high", deadline="2026-01-01T00:00:00+00:00"),
+    ]
+    order = [f.check_id for f in sorted(fs, key=lambda f: rank_key(f, NOW))]
+    assert order[:5] == ["high-sooner", "medium-soon", "critical", "high-paid", "high-wide"]
+    assert order[-1] == "low-cheap"
+
+
+def test_kpi_keeps_cost_optimization_hub_apart_and_skips_resources_already_counted(tmp_path):
+    vol = plain("ebs-unattached", "medium", usd=40.0, resource="arn:aws:ec2:us-east-1:111122223333:volume/vol-1")
+    dup = plain("coh-delete", "low", usd=30.0, source="cost-optimization-hub", resource=vol.resource)
+    other = plain("coh-rightsize", "medium", usd=200.0, source="cost-optimization-hub")
+    (tmp_path / "snapshot.json").write_text(json.dumps({"meta": {"account_id": "111122223333",
+                                                                 "collected_at": "2026-01-15T12:00:00+00:00"}}))
+    (tmp_path / "findings.json").write_text(json.dumps([vol.to_dict()]))
+    (tmp_path / "imported").mkdir()
+    (tmp_path / "imported" / "coh-x.json").write_text(json.dumps([dup.to_dict(), other.to_dict()]))
+    render_all(tmp_path)
+    md = (tmp_path / "report.md").read_text()
+    assert "- At stake per month: US$40.00" in md
+    assert "- Cost Optimization Hub estimate: US$200 (" in md
+
+
+def deadline_run(tmp_path, collected_at="2026-01-15T12:00:00+00:00"):
+    eks = Finding(check_id="eks-extended-support", resource="arn:aws:eks:us-east-1:111122223333:cluster/prod",
+                  severity="high", category="outdated", region="us-east-1",
+                  text=text("EKS cluster prod leaves standard support in 16 days",
+                            lang_title="O cluster EKS prod sai do suporte padrão em 16 dias"),
+                  deadline="2026-02-01T00:00:00+00:00", monthly_usd=365.0,
+                  notes=[{"en": "List price only.", "pt-BR": "Só preço de lista."}, "plain note"])
+    (tmp_path / "snapshot.json").write_text(json.dumps({"meta": {"account_id": "111122223333",
+                                                                 "collected_at": collected_at}}))
+    (tmp_path / "findings.json").write_text(json.dumps([eks.to_dict()]))
+    (tmp_path / "adjustments.jsonl").write_text(json.dumps(
+        {"uid": eks.uid, "verdict": "downgraded", "severity": "medium", "reason": "staging only"}) + "\n")
+    return eks
+
+
+def test_now_defaults_to_snapshot_collection_time(tmp_path):
+    deadline_run(tmp_path)
+    run = load_run(tmp_path)
+    assert run.now == NOW
+    render_all(tmp_path)
+    assert "2026-02-01 (in 16 days)" in (tmp_path / "report.md").read_text()
+
+
+def test_html_deadlines_stay_in_utc(tmp_path):
+    deadline_run(tmp_path)
+    render_all(tmp_path)
+    doc = (tmp_path / "report.html").read_text("ascii")
+    assert "toLocaleString" not in doc
+    assert '<time datetime="2026-02-01T00:00:00+00:00" title="2026-02-01 00:00 UTC">2026-02-01</time>' in doc
+    assert ">2026-02-01 00:00 UTC</time>" in doc
+
+
+def test_ics_summary_has_no_relative_time(tmp_path):
+    deadline_run(tmp_path)
+    for lang, title in (("en", "EKS cluster leaving standard support: prod"),
+                        ("pt-BR", "Cluster EKS saindo do suporte padrão: prod")):
+        render_all(tmp_path, lang=lang)
+        lines = (tmp_path / "deadlines.ics").read_bytes().replace(b"\r\n ", b"").decode("utf-8").split("\r\n")
+        assert f"SUMMARY:{title}" in lines
+        assert f"DESCRIPTION:{title}" in lines
+
+
+@pytest.mark.parametrize("lang,review,note", [
+    ("en", "Downgraded (High to Medium): staging only", "List price only."),
+    ("pt-BR", "Rebaixado (Alto para M&#xe9;dio): staging only", "S&#xf3; pre&#xe7;o de lista."),
+])
+def test_review_and_check_notes_follow_the_report_language(tmp_path, lang, review, note):
+    deadline_run(tmp_path)
+    render_all(tmp_path, lang=lang)
+    doc = (tmp_path / "report.html").read_text("ascii")
+    assert f"<li>{review}</li>" in doc and f"<li>{note}</li>" in doc and "<li>plain note</li>" in doc
+    assert "downgraded:" not in doc
+    ocsf = json.loads((tmp_path / "findings.ocsf.json").read_text())
+    assert ocsf[0]["unmapped"]["notes"] == ["List price only.", "plain note",
+                                            "Downgraded (High to Medium): staging only"]
+
+
+def test_start_here_shows_seven(tmp_path):
+    fs = [plain(f"check-{i}", "high") for i in range(9)]
+    (tmp_path / "snapshot.json").write_text(json.dumps({"meta": {"collected_at": "2026-01-15T12:00:00+00:00"}}))
+    (tmp_path / "findings.json").write_text(json.dumps([f.to_dict() for f in fs]))
+    render_all(tmp_path)
+    doc = (tmp_path / "report.html").read_text("ascii")
+    start = doc[doc.index('id="start"'):doc.index('id="inventory"')]
+    assert start.count('class="card ') == 7
+    md = (tmp_path / "report.md").read_text()
+    assert "7. [HIGH]" in md and "8. [HIGH]" not in md

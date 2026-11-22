@@ -49,8 +49,9 @@ def _validate(n: int, adj: dict, current: dict[str, str]) -> str:
         return f"line {n}: killing {uid} needs evidence"
     if verdict == "question":
         q = adj.get("question") or {}
-        if not isinstance(q, dict) or not str(q.get("en") or "").strip():
-            return f"line {n}: question verdict for {uid} needs question.en"
+        missing = [k for k in ("en", "pt-BR") if not isinstance(q, dict) or not str(q.get(k) or "").strip()]
+        if missing:
+            return f"line {n}: question verdict for {uid} needs " + " and ".join(f"question.{k}" for k in missing)
     return ""
 
 
@@ -87,11 +88,11 @@ def apply(findings: list[Finding], adjustments_path: Path | None) -> tuple[list[
         for _, adj in entries:
             f = by_uid[adj["uid"]]
             verdict, reason = adj["verdict"], str(adj["reason"]).strip()
+            note = {"verdict": verdict, "reason": reason}
             if adj.get("severity") and adj["severity"] != f.severity:
-                f.notes.append(f"{verdict}: severity {f.severity} -> {adj['severity']}. {reason}")
+                note.update({"from": f.severity, "to": adj["severity"]})
                 f.severity = adj["severity"]
-            else:
-                f.notes.append(f"{verdict}: {reason}")
+            f.notes.append(note)
             if verdict == "killed":
                 f.status = "killed"
                 killed[f.uid] = Killed(f, reason, _evidence(adj.get("evidence")))

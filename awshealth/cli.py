@@ -8,13 +8,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__
-from .model import Finding
+from .model import SEVERITIES, Finding
 from .runner import Context, run_checks
 from .snapshot import Snapshot
 
+RUN_HELP = "run directory; default: the latest run under the runs dir"
+DEMO_DIR = "awshealth-demo"
+
 
 def default_runs_dir() -> Path:
-    base = os.environ.get("AWSHEALTH_HOME") or os.environ.get("CLAUDE_PLUGIN_DATA")
+    base = os.environ.get("AWSHEALTH_HOME")
     if base:
         return Path(base) / "runs"
     return Path.home() / ".local" / "share" / "awshealth" / "runs"
@@ -52,10 +55,31 @@ def cmd_collect(a: argparse.Namespace) -> None:
     print(run)
 
 
+def snapshot_time(collected_at: str) -> datetime:
+    from .render.common import parse_ts
+
+    return parse_ts(collected_at) or datetime.now(timezone.utc)
+
+
+def summary(results, findings: list[dict], run: Path) -> str:
+    statuses: dict[str, int] = {}
+    for r in results:
+        statuses[r.status] = statuses.get(r.status, 0) + 1
+    by_sev = [f"{sum(1 for f in findings if f['severity'] == sev)} {sev}" for sev in SEVERITIES
+              if any(f["severity"] == sev for f in findings)]
+    lines = [f"{len(results)} checks: " + ", ".join(f"{n} {'with findings' if st == 'finding' else st}"
+                                                    for st, n in sorted(statuses.items())),
+             f"{len(findings)} findings" + (": " + ", ".join(by_sev) if by_sev else ""),
+             f"run: {run}",
+             f"next: awshealth render --run {run}"]
+    return "\n".join(lines)
+
+
 def cmd_check(a: argparse.Namespace) -> None:
     run = Path(a.run) if a.run else latest_run_dir()
     snap = Snapshot.load(run)
-    results = run_checks(snap, Context(account_id=snap.account_id), only=a.only.split(",") if a.only else None)
+    ctx = Context(now=snapshot_time(snap.collected_at), account_id=snap.account_id)
+    results = run_checks(snap, ctx, only=a.only.split(",") if a.only else None)
     findings = [f.to_dict() for r in results for f in r.findings]
     (run / "findings.json").write_text(json.dumps(findings, indent=1))
     (run / "checks.json").write_text(
@@ -67,10 +91,7 @@ def cmd_check(a: argparse.Namespace) -> None:
             indent=1,
         )
     )
-    counts: dict[str, int] = {}
-    for r in results:
-        counts[r.status] = counts.get(r.status, 0) + 1
-    print(f"{len(findings)} findings from {len(results)} checks {counts} -> {run}")
+    print(summary(results, findings, run))
 
 
 def cmd_import(a: argparse.Namespace) -> None:
@@ -95,17 +116,24 @@ def cmd_render(a: argparse.Namespace) -> None:
 
 def cmd_verify(a: argparse.Namespace) -> None:
     run = Path(a.run) if a.run else latest_run_dir()
+    matched: set[str] = set()
     for f in load_findings(run):
         if not a.uid or f.uid in a.uid or f.check_id in a.uid:
+            matched.update({f.uid, f.check_id})
             print(f"# {f.uid} {f.t('title')}")
             for c in f.verify:
                 print(c)
+            if not f.verify:
+                print("# no read-only verify commands for this finding")
+    unknown = [u for u in a.uid if u not in matched]
+    if unknown:
+        sys.exit(f"awshealth: no finding with uid or check id {', '.join(unknown)} in {run}")
 
 
 def cmd_demo(a: argparse.Namespace) -> None:
     from .demo import run_demo
 
-    for p in run_demo(Path(a.out) if a.out else new_run_dir(), lang=a.lang):
+    for p in run_demo(Path(a.out), lang=a.lang):
         print(p)
 
 
@@ -129,28 +157,28 @@ def main(argv: list[str] | None = None) -> None:
     s.set_defaults(fn=cmd_collect)
 
     s = sub.add_parser("check", help="run deterministic checks on a snapshot (no AWS access)")
-    s.add_argument("--run")
+    s.add_argument("--run", help=RUN_HELP)
     s.add_argument("--only", help="comma-separated check ids")
     s.set_defaults(fn=cmd_check)
 
     s = sub.add_parser("import", help="import findings from Prowler OCSF or Cost Optimization Hub exports")
     s.add_argument("file")
     s.add_argument("--kind", choices=["prowler", "coh"])
-    s.add_argument("--run")
+    s.add_argument("--run", help=RUN_HELP)
     s.set_defaults(fn=cmd_import)
 
     s = sub.add_parser("render", help="write report.html, report.md, deadlines.ics and more (no AWS access)")
-    s.add_argument("--run")
+    s.add_argument("--run", help=RUN_HELP)
     s.add_argument("--lang", default="en", choices=["en", "pt-BR"])
     s.set_defaults(fn=cmd_render)
 
     s = sub.add_parser("verify", help="print read-only aws CLI commands that re-check findings")
-    s.add_argument("uid", nargs="*")
-    s.add_argument("--run")
+    s.add_argument("uid", nargs="*", help="finding uids or check ids; default: every finding")
+    s.add_argument("--run", help=RUN_HELP)
     s.set_defaults(fn=cmd_verify)
 
     s = sub.add_parser("demo", help="run the full pipeline on a fictional account (no AWS access)")
-    s.add_argument("--out")
+    s.add_argument("--out", default=DEMO_DIR, help=f"output directory; default: ./{DEMO_DIR}")
     s.add_argument("--lang", default="en", choices=["en", "pt-BR"])
     s.set_defaults(fn=cmd_demo)
 
@@ -162,6 +190,10 @@ def main(argv: list[str] | None = None) -> None:
     a = p.parse_args(argv)
     try:
         a.fn(a)
+        sys.stdout.flush()
+    except BrokenPipeError:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        sys.exit(1)
     except (FileNotFoundError, ValueError) as exc:
         sys.exit(f"awshealth: {exc}")
 

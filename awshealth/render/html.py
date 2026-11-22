@@ -10,11 +10,13 @@ from .common import (
     Run,
     by_owner,
     cap,
+    coh_usd,
     dated,
     days_until,
     fmt_usd,
     high_count,
     nearest_deadline,
+    note_lines,
     owner_text,
     total_usd,
     utc_text,
@@ -22,7 +24,7 @@ from .common import (
 from .i18n import strings
 
 NON_ASCII = re.compile(r"[^\x00-\x7f]")
-START_HERE = 5
+START_HERE = 7
 
 CSS = """
 :root{--bg:#f6f6f4;--surface:#fff;--surface-2:#f0f0ed;--text:#1c2024;--muted:#5d6670;--border:#e1e1dc;
@@ -123,12 +125,6 @@ JS = """
 var T=JSON.parse(document.getElementById('awshealth-i18n').textContent);
 document.documentElement.className='js';
 function fmt(s,n,t){return s.replace('{n}',n).replace('{total}',t);}
-document.querySelectorAll('time[datetime]').forEach(function(el){
-var d=new Date(el.getAttribute('datetime'));if(isNaN(d))return;
-el.title=el.textContent;
-var o=el.dataset.date?{dateStyle:'medium'}:{dateStyle:'medium',timeStyle:'short'};
-try{el.textContent=d.toLocaleString(T.lang,o);}catch(e){}
-});
 document.querySelectorAll('button.copy').forEach(function(b){
 b.addEventListener('click',function(){
 var text=b.parentNode.querySelector('code').textContent;
@@ -186,8 +182,7 @@ def anchor(f: Finding) -> str:
 
 
 def time_el(ts: str, date_only: bool = False) -> str:
-    extra = ' data-date="1"' if date_only else ""
-    return f'<time datetime="{e(ts, 64)}"{extra}>{e(utc_text(ts, not date_only))}</time>'
+    return f'<time datetime="{e(ts, 64)}" title="{e(utc_text(ts))}">{e(utc_text(ts, not date_only))}</time>'
 
 
 def rel_el(ts: str, run: Run, s: dict) -> str:
@@ -241,13 +236,20 @@ def kpis(run: Run, s: dict, lang: str) -> str:
     cards = [
         (s["kpi_deadline"], deadline),
         (s["kpi_usd"], f'<div class="value">{e(fmt_usd(total_usd(run), lang))}</div>'
-                       f'<div class="sub">{e(s["kpi_usd_note"])}</div>'),
+                       f'<div class="sub">{e(s["kpi_usd_note"])}</div>{coh_line(run, s, lang)}'),
         (s["kpi_high"], f'<div class="value">{high_count(run)}</div>'),
         (s["kpi_coverage"], f'<div class="value">{cov["checked"]}/{cov["total"]}</div>'
                             f'<div class="sub">{e(s["status_agent"])}: {cov["counts"]["agent"]}</div>'),
     ]
     body = "".join(f'<div class="kpi"><div class="label">{e(k)}</div>{v}</div>' for k, v in cards)
     return f'<section class="kpis" aria-label="KPIs">{body}</section>'
+
+
+def coh_line(run: Run, s: dict, lang: str) -> str:
+    coh = coh_usd(run)
+    if not coh:
+        return ""
+    return f'<div class="sub">{e(s["kpi_coh"])}: {e(fmt_usd(coh, lang))} ({e(s["kpi_coh_note"])})</div>'
 
 
 def start_here(run: Run, s: dict, lang: str) -> str:
@@ -289,8 +291,8 @@ def item(f: Finding, run: Run, s: dict, lang: str) -> str:
         blocks.append(f'<div><h4>{e(s["fix"])}</h4><p>{e(f.t("fix", lang))}</p></div>')
     if owner_text(f, lang):
         blocks.append(f'<div class="question"><h4>{e(s["owner_question"])}</h4><p>{e(owner_text(f, lang))}</p></div>')
-    if f.notes:
-        notes = "".join(f"<li>{e(n, 600)}</li>" for n in f.notes[:20])
+    if note_lines(f, lang):
+        notes = "".join(f"<li>{e(n, 600)}</li>" for n in note_lines(f, lang)[:20])
         blocks.append(f'<div><h4>{e(s["notes"])}</h4><ul class="plain">{notes}</ul></div>')
     blocks.append(claims_table(f, s))
     if f.verify:
@@ -421,7 +423,6 @@ def footer(run: Run, s: dict) -> str:
 def render_html(run: Run, lang: str) -> str:
     s = strings(lang)
     t = {k: s[k] for k in ("copy", "copied", "showing", "in_days", "days_ago", "today")}
-    t["lang"] = lang
     body = "".join([
         header(run, s), kpis(run, s, lang), start_here(run, s, lang), inventory(run, s, lang), killed(run, s, lang),
         questions(run, s, lang), deadlines(run, s, lang), coverage(run, s), footer(run, s),

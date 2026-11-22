@@ -28,7 +28,9 @@ def test_downgrade_kill_and_question(tmp_path):
                  {"uid": d.uid, "verdict": "confirmed", "reason": "checked", "evidence": "describe output"})
     kept, killed, questions = apply([a, b, c, d], path)
     assert [f.uid for f in kept] == [a.uid, c.uid, d.uid]
-    assert a.severity == "low" and "high -> low" in a.notes[0]
+    assert a.severity == "low"
+    assert a.notes == [{"verdict": "downgraded", "reason": "dev account", "from": "high", "to": "low"}]
+    assert d.notes == [{"verdict": "confirmed", "reason": "checked"}]
     assert killed[0].finding.uid == b.uid and killed[0].evidence == ["kubernetes.io/pvc tag"]
     assert [f.uid for f in questions] == [c.uid]
     assert c.owner_question["pt-BR"].startswith("Isto")
@@ -69,4 +71,16 @@ def test_rejects_upgrade_after_earlier_downgrade(tmp_path):
                  {"uid": a.uid, "verdict": "downgraded", "severity": "low", "reason": "x", "evidence": "y"},
                  {"uid": a.uid, "verdict": "downgraded", "severity": "medium", "reason": "x", "evidence": "y"})
     with pytest.raises(ValueError, match="line 2"):
+        apply([a], path)
+
+
+@pytest.mark.parametrize("question,missing", [
+    ({"en": "Is this a DR replica?"}, "question.pt-BR"),
+    ({"pt-BR": "Isto é uma réplica de DR?"}, "question.en"),
+    ({"en": " ", "pt-BR": ""}, "question.en and question.pt-BR"),
+])
+def test_question_needs_both_languages(tmp_path, question, missing):
+    a = finding("a")
+    path = write(tmp_path, {"uid": a.uid, "verdict": "question", "reason": "intent unclear", "question": question})
+    with pytest.raises(ValueError, match=missing):
         apply([a], path)

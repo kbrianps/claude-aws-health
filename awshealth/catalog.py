@@ -57,8 +57,11 @@ def catalog_coverage(run_dir: Path | None) -> dict:
 
 def print_catalog(category: str | None = None, fmt: str = "table") -> None:
     covers = covering_checks()
-    rows = [dict(e, covered_by=covers.get(e["id"], [])) for e in load_catalog()
-            if not category or e["category"] == category]
+    catalog = load_catalog()
+    categories = sorted({e["category"] for e in catalog})
+    if category and category not in categories:
+        raise ValueError(f"unknown category {category!r}; valid categories: {', '.join(categories)}")
+    rows = [dict(e, covered_by=covers.get(e["id"], [])) for e in catalog if not category or e["category"] == category]
     if fmt == "json":
         print(json.dumps(rows, indent=1, ensure_ascii=False))
         return

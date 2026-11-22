@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import re
 import shlex
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -10,11 +9,32 @@ SEVERITIES = ("critical", "high", "medium", "low", "info")
 CATEGORIES = ("cost", "security", "zombie", "outdated", "errors", "resilience", "governance", "quota")
 
 
+def _expands_outside_single_quotes(cmd: str) -> bool:
+    quote = ""
+    escaped = False
+    for ch in cmd:
+        if escaped:
+            escaped = False
+            continue
+        if quote == "'":
+            if ch == "'":
+                quote = ""
+            continue
+        if ch == "\\":
+            escaped = True
+        elif ch in "$`":
+            return True
+        elif ch == '"':
+            quote = "" if quote == '"' else '"'
+        elif ch == "'" and not quote:
+            quote = "'"
+    return False
+
+
 def safe_command(cmd: str) -> bool:
     if not isinstance(cmd, str) or not cmd.startswith("aws ") or "\n" in cmd:
         return False
-    unquoted = re.sub(r"'[^']*'", "", cmd)
-    if "`" in unquoted or "$" in unquoted:
+    if _expands_outside_single_quotes(cmd):
         return False
     try:
         lexer = shlex.shlex(cmd, posix=True, punctuation_chars=True)

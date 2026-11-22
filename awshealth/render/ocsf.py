@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from ..model import Finding
-from .common import Run, parse_ts
+from .common import Run, note_lines, parse_ts
 
 OCSF_VERSION = "1.3.0"
 SEVERITY_ID = {"info": 1, "low": 2, "medium": 3, "high": 4, "critical": 5}
@@ -54,7 +54,7 @@ def detection(f: Finding, run: Run, reason: str = "") -> dict:
             "deadline": f.deadline,
             "owner_question": f.owner_question.get("en", ""),
             "evidence": [{"source": c.source, "path": c.path, "value": c.value} for c in f.claims],
-            "notes": f.notes,
+            "notes": note_lines(f, "en"),
         },
     }
     if reason:

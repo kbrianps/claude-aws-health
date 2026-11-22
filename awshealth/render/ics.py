@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import re
 from datetime import timedelta, timezone
 from pathlib import Path
 
+from ..model import Finding
+from ..registry import load_checks
 from .common import Run, cap, owner_text, parse_ts
 from .i18n import strings
 
@@ -30,6 +33,15 @@ def stamp(d) -> str:
     return d.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+def summary(f: Finding, lang: str) -> str:
+    spec = load_checks().get(f.check_id)
+    title = (spec.title.get(lang) or spec.title.get("en", "")) if spec else ""
+    if not title:
+        return cap(f.t("title", lang), 200)
+    name = re.split(r"[/:]", f.resource.rstrip("/:"))[-1]
+    return cap(f"{title}: {name}" if name else title, 200)
+
+
 def events(run: Run, lang: str) -> list[list[str]]:
     s = strings(lang)
     out = []
@@ -41,7 +53,7 @@ def events(run: Run, lang: str) -> list[list[str]]:
         if owner_text(f, lang):
             parts.append(f"{s['owner_question']}: {owner_text(f, lang)}")
         parts += [f"{s['resources']}: {', '.join(f.resources[:10])}", f.uid]
-        title = cap(f.t("title", lang), 200)
+        title = summary(f, lang)
         out.append([
             "BEGIN:VEVENT",
             f"UID:{escape(f.uid)}@awshealth",
