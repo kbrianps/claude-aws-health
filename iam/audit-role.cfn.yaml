@@ -8,6 +8,8 @@ Parameters:
   TrustedPrincipalArn:
     Type: String
     Default: ""
+    AllowedPattern: "^$|^arn:aws[a-z-]*:iam::\\d{12}:(role|user)/.+$"
+    ConstraintDescription: Must be empty or the full ARN of an IAM role or user, like arn:aws:iam::111122223333:role/name.
     Description: >-
       ARN of the IAM user or role allowed to assume this role, in this account or in the management account
       (for IAM Identity Center use the full ARN of the AWSReservedSSO_* role). Leave empty to trust only GitHub OIDC.
@@ -15,6 +17,7 @@ Parameters:
     Type: String
     Default: ""
     AllowedPattern: "^$|^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    ConstraintDescription: Must be empty or owner/repo, using only letters, digits, dot, dash and underscore.
     Description: Optional owner/repo whose GitHub Actions may assume this role through OIDC. Leave empty to disable.
   GitHubEnvironment:
     Type: String
@@ -118,6 +121,8 @@ Resources:
                   - ec2:GetConsoleScreenshot
                   - codecommit:GetFile
                   - codecommit:GetBlob
+                  - codebuild:BatchGetBuilds
+                  - ssm:ListCommandInvocations
                 Resource: "*"
               - Sid: DenyCredentialMinting
                 Effect: Deny
@@ -128,6 +133,8 @@ Resources:
                   - redshift:GetClusterCredentials*
                   - lightsail:GetInstanceAccessDetails
                   - codeartifact:GetAuthorizationToken
+                  - gamelift:GetInstanceAccess
+                  - sts:GetWebIdentityToken
                 Resource: "*"
               - Sid: DenySecretBearingConfig
                 Effect: Deny
@@ -141,6 +148,9 @@ Resources:
                   - account:GetPrimaryEmail
                   - account:GetAlternateContact
                   - account:GetContactInformation
+                  - lightsail:GetRelationalDatabaseMasterUserPassword
+                  - ec2:GetLaunchTemplateData
+                  - ec2:DescribeInstanceAttribute
                 Resource: "*"
               - Sid: DenyBilledReads
                 Effect: Deny

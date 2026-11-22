@@ -106,8 +106,8 @@ awshealth collect --profile aws-health-audit
 
 ## Cost and metric reads
 
-`AllowCostAndMetrics=false` (the default) denies `cloudwatch:GetMetricData` and `cloudwatch:GetMetricStatistics`, so `awshealth collect --metrics` reports those checks as `no_access`. Set it to `true` to allow `ce:Get*` and `cloudwatch:GetMetricData`. Cost Explorer costs US$0.01 per request and metric reads are billed per metric.
+`AllowCostAndMetrics=false` (the default) denies `cloudwatch:GetMetricData` and `cloudwatch:GetMetricStatistics`, so `awshealth collect --metrics` reports those checks as `no_access`. Cost Explorer is not in the deny; with the default the template simply does not grant `ce:Get*`. Set it to `true` to allow `ce:Get*` and `cloudwatch:GetMetricData`. Cost Explorer costs US$0.01 per request and metric reads are billed per metric.
 
 ## Using only the deny policy
 
-If you prefer your own role, attach `SecurityAudit` and `ViewOnlyAccess` and add `deny-policy.json` as an inline policy. It is under the 6,144-character limit for managed policies. Remove the `DenyBilledMetricReads` statement if you want `--metrics`.
+If you prefer your own role, attach `SecurityAudit` and `ViewOnlyAccess` and add `deny-policy.json` as an inline policy. Inline policies of a role share a 10,240-character aggregate limit (whitespace not counted); if you create it as a customer managed policy instead, each managed policy is limited to 6,144 characters. The deny policy is well under both. Remove the `DenyBilledMetricReads` statement if you want `--metrics`.

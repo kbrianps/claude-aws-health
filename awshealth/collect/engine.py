@@ -7,6 +7,7 @@ import os
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 from collections import Counter
 from collections.abc import Callable
@@ -31,6 +32,7 @@ from .ratelimit import RateLimiter
 HOME_REGION = "us-east-1"
 IP_RANGES_URL = "https://ip-ranges.amazonaws.com/ip-ranges.json"
 IP_SERVICES = ("EC2", "AMAZON", "GLOBALACCELERATOR")
+MAX_IP_RANGES_BYTES = 8 * 1024 * 1024
 MAX_IDS = 500
 MAX_WORKERS = 6
 ACCOUNT_PLACEHOLDER = "{account}"
@@ -108,9 +110,21 @@ def _param_sets(value: Any, param: str) -> list[tuple[str, dict[str, Any]]]:
     return list(out.items())
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, f"refusing redirect to {newurl}", headers, fp)
+
+
+def open_url(url: str) -> Any:
+    return urllib.request.build_opener(NoRedirect).open(url, timeout=20)
+
+
 def fetch_ip_ranges() -> list[dict[str, str]]:
-    with urllib.request.urlopen(IP_RANGES_URL, timeout=20) as resp:
-        doc = json.load(resp)
+    with open_url(IP_RANGES_URL) as resp:
+        raw = resp.read(MAX_IP_RANGES_BYTES + 1)
+    if len(raw) > MAX_IP_RANGES_BYTES:
+        raise ValueError("ip-ranges.json is larger than 8 MB")
+    doc = json.loads(raw)
     best: dict[str, dict[str, str]] = {}
     for p in doc.get("prefixes", []):
         if p.get("service") not in IP_SERVICES or not p.get("ip_prefix"):
@@ -299,15 +313,16 @@ def collect(profile: str | None, regions: list[str] | None, run_dir: Path, metri
     started = time.monotonic()
     collected_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     run_dir = Path(run_dir)
+    created = not run_dir.exists()
     run_dir.mkdir(parents=True, exist_ok=True)
-    os.chmod(run_dir, 0o700)
+    if created:
+        os.chmod(run_dir, 0o700)
 
     run, skipped, parents = gather(load_checks() if specs is None else specs, metrics, cost)
     allowed = {(c.service, c.operation) for c in run} | {(CALLER.service, CALLER.operation),
                                                          (ENABLED_REGIONS.service, ENABLED_REGIONS.operation)}
     guard = Guard(allowed)
     session = session or boto3.Session(profile_name=profile)
-    guard.install(session.events)
     col = Collector(session, client_factory or default_client_factory, run_dir, guard, RateLimiter())
     col.parents = parents
 

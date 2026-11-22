@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import stat
 import urllib.error
 import urllib.request
@@ -18,6 +19,7 @@ from awshealth.registry import CheckSpec, call
 from awshealth.snapshot import Snapshot
 
 ACCOUNT = "111122223333"
+REAL_OPEN_URL = engine.open_url
 ARN = "arn:aws:iam::111122223333:user/audit"
 
 
@@ -66,7 +68,7 @@ def no_network(monkeypatch):
     def offline(*a, **kw):
         raise urllib.error.URLError("offline")
 
-    monkeypatch.setattr(urllib.request, "urlopen", offline)
+    monkeypatch.setattr(engine, "open_url", offline)
 
 
 VOLUMES = call("ec2", "DescribeVolumes", keep="Volumes[].{id: VolumeId, size: Size}", result_key="Volumes")
@@ -289,13 +291,13 @@ def test_ip_ranges_are_filtered_deduplicated_and_sorted(tmp_path, monkeypatch):
     ], "ipv6_prefixes": [{"ipv6_prefix": "2001:db8::/32", "region": "us-east-1", "service": "AMAZON"}]}
     seen = {}
 
-    def fake_urlopen(url, timeout):
-        seen.update(url=url, timeout=timeout)
+    def fake_open(url):
+        seen.update(url=url)
         return io.BytesIO(json.dumps(doc).encode())
 
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(engine, "open_url", fake_open)
     snap = run(tmp_path, Fake(), specs())
-    assert seen == {"url": "https://ip-ranges.amazonaws.com/ip-ranges.json", "timeout": 20}
+    assert seen == {"url": "https://ip-ranges.amazonaws.com/ip-ranges.json"}
     assert snap.status(calls_core.IP_RANGES) == "ok"
     assert snap.get(calls_core.IP_RANGES) == [
         {"cidr": "192.0.2.0/24", "region": "sa-east-1", "service": "AMAZON"},
@@ -307,6 +309,75 @@ def test_ip_ranges_are_filtered_deduplicated_and_sorted(tmp_path, monkeypatch):
 def test_ip_ranges_network_failure_is_error(tmp_path):
     snap = run(tmp_path, Fake(), specs())
     assert snap.status(calls_core.IP_RANGES) == "error"
+
+
+def test_ip_ranges_larger_than_cap_is_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(engine, "MAX_IP_RANGES_BYTES", 16)
+    monkeypatch.setattr(engine, "open_url", lambda url: io.BytesIO(json.dumps({"prefixes": []}).encode() + b" " * 20))
+    snap = run(tmp_path, Fake(), specs())
+    assert snap.status(calls_core.IP_RANGES) == "error"
+    assert snap.data[calls_core.IP_RANGES.key]["global"]["error"] == "ValueError"
+
+
+def test_ip_ranges_redirect_is_refused():
+    req = urllib.request.Request(engine.IP_RANGES_URL)
+    with pytest.raises(urllib.error.HTTPError, match="refusing redirect"):
+        engine.NoRedirect().redirect_request(req, io.BytesIO(), 302, "Found", {}, "https://example.com/ip.json")
+
+
+def test_ip_ranges_opener_keeps_tls_verification_and_refuses_redirects(monkeypatch):
+    built = {}
+
+    class Opener:
+        def open(self, url, timeout):
+            built.update(url=url, timeout=timeout)
+            return io.BytesIO(b"{}")
+
+    def fake_build(*handlers):
+        built["handlers"] = handlers
+        return Opener()
+
+    monkeypatch.setattr(urllib.request, "build_opener", fake_build)
+    REAL_OPEN_URL(engine.IP_RANGES_URL)
+    assert built["handlers"] == (engine.NoRedirect,)
+    assert built["url"].startswith("https://") and built["timeout"] == 20
+
+
+def test_existing_run_dir_keeps_its_mode(tmp_path):
+    (tmp_path / "run").mkdir(mode=0o755)
+    os.chmod(tmp_path / "run", 0o755)
+    fake = Fake()
+    fake.ok("ec2", "us-east-1", "describe_volumes", {"Volumes": []})
+    run(tmp_path, fake, specs(VOLUMES))
+    assert stat.S_IMODE((tmp_path / "run").stat().st_mode) == 0o755
+
+
+ASSUMED = {"Credentials": {"AccessKeyId": "ASIAIOSFODNN7EXAMPLE", "SecretAccessKey": "x", "SessionToken": "y",
+                           "Expiration": "2026-01-01T00:00:00Z"}}
+
+
+def test_session_clients_are_not_guarded_but_collector_clients_are(tmp_path):
+    session = boto3.Session(aws_access_key_id="testing", aws_secret_access_key="testing", region_name="us-east-1")
+    made = []
+    fake = Fake()
+    fake.ok("sts", "us-east-1", "assume_role", ASSUMED)
+
+    def factory(sess, service, region, config):
+        client = fake.factory(sess, service, region, config)
+        made.append(client)
+        return client
+
+    collect(None, ["us-east-1"], tmp_path / "run", session=session, client_factory=factory, specs=specs())
+    guarded = made[0]
+    with pytest.raises(AllowlistViolation):
+        guarded.assume_role(RoleArn="arn:aws:iam::111122223333:role/audit", RoleSessionName="audit")
+    plain = session.client("sts", region_name="us-east-1")
+    stub = Stubber(plain)
+    stub.add_response("assume_role", ASSUMED)
+    stub.activate()
+    assert plain.assume_role(RoleArn="arn:aws:iam::111122223333:role/audit",
+                             RoleSessionName="audit")["Credentials"]["AccessKeyId"] == "ASIAIOSFODNN7EXAMPLE"
+    stub.assert_no_pending_responses()
 
 
 SELECTIONS = call("backup", "ListBackupSelections",
