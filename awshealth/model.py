@@ -1,11 +1,28 @@
 from __future__ import annotations
 
 import hashlib
+import re
+import shlex
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
 SEVERITIES = ("critical", "high", "medium", "low", "info")
 CATEGORIES = ("cost", "security", "zombie", "outdated", "errors", "resilience", "governance", "quota")
+
+
+def safe_command(cmd: str) -> bool:
+    if not isinstance(cmd, str) or not cmd.startswith("aws ") or "\n" in cmd:
+        return False
+    unquoted = re.sub(r"'[^']*'", "", cmd)
+    if "`" in unquoted or "$" in unquoted:
+        return False
+    try:
+        lexer = shlex.shlex(cmd, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        return False
+    return not any(t and set(t) <= set("();<>|&") for t in tokens)
 
 
 @dataclass
@@ -33,7 +50,7 @@ class Finding:
     confidence: str = "high"
     source: str = "awshealth"
     status: str = "open"
-    notes: list[str] = field(default_factory=list)
+    notes: list[str | dict[str, str]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.severity not in SEVERITIES:
@@ -44,11 +61,18 @@ class Finding:
             raise ValueError(f"{self.check_id} needs text['en']['title']")
         if not self.resources:
             self.resources = [self.resource]
+        self.verify = [c for c in self.verify if safe_command(c)]
 
     @property
     def uid(self) -> str:
         digest = hashlib.sha256(f"{self.check_id}|{self.region}|{self.resource}".encode()).hexdigest()[:12]
         return f"{self.check_id}:{digest}"
+
+    def note_texts(self, lang: str = "en") -> list[str]:
+        out = []
+        for n in self.notes:
+            out.append(n if isinstance(n, str) else (n.get(lang) or n.get("en", "")))
+        return [n for n in out if n]
 
     def t(self, key: str, lang: str = "en") -> str:
         return self.text.get(lang, {}).get(key) or self.text["en"].get(key, "")

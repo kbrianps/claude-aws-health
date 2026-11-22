@@ -27,3 +27,27 @@ def test_every_check_has_bilingual_title_and_known_catalog_ids():
     for cid, spec in load_checks().items():
         assert spec.title["en"] and spec.title["pt-BR"], cid
         assert set(spec.catalog_ids) <= catalog, (cid, set(spec.catalog_ids) - catalog)
+
+
+def test_verify_commands_reject_shell_injection():
+    from awshealth.model import safe_command
+
+    assert safe_command("aws ec2 describe-instances --region us-east-1 --query 'R[?S==`running`]' --output text")
+    assert safe_command("aws logs describe-log-groups --region us-east-1 --log-group-name-prefix 'a;b' --output text")
+    assert not safe_command("aws resourcegroupstaggingapi get-resources --tag-filters Key=x;id>/tmp/p;#")
+    assert not safe_command("aws s3 ls $(id)")
+    assert not safe_command("aws s3 ls `id`")
+    assert not safe_command("rm -rf /")
+
+
+def test_demo_findings_keep_their_verify_commands():
+    import json
+    import tempfile
+    from pathlib import Path
+
+    from awshealth.demo import run_demo
+
+    with tempfile.TemporaryDirectory() as d:
+        run_demo(Path(d))
+        findings = json.loads((Path(d) / "findings.json").read_text())
+    assert findings and all(f["verify"] for f in findings), [f["check_id"] for f in findings if not f["verify"]]
