@@ -1,0 +1,17 @@
+{
+  "name": "kbrianps",
+  "description": "Plugins by Brian Pravato",
+  "owner": {
+    "name": "Brian Pravato",
+    "url": "https://github.com/kbrianps"
+  },
+  "plugins": [
+    {
+      "name": "aws-health",
+      "source": "./",
+      "description": "Read-only AWS health audit with a skeptic pass and a guard hook; the agent never holds your credentials.",
+      "category": "devops",
+      "keywords": ["aws", "audit", "finops", "security"]
+    }
+  ]
+}

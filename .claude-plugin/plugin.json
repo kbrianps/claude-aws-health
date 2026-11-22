@@ -1,0 +1,14 @@
+{
+  "name": "aws-health",
+  "displayName": "AWS Health",
+  "version": "0.1.0",
+  "description": "Read-only AWS health audit: extended support deadlines in dollars, forgotten resources, silent failures and security gaps, with a skeptic pass and a guard hook. The agent never holds your credentials.",
+  "author": {
+    "name": "Brian Pravato",
+    "url": "https://github.com/kbrianps"
+  },
+  "homepage": "https://github.com/kbrianps/claude-aws-health",
+  "repository": "https://github.com/kbrianps/claude-aws-health",
+  "license": "MIT",
+  "keywords": ["aws", "audit", "finops", "security", "cost", "extended-support", "read-only"]
+}

@@ -1,0 +1,17 @@
+{
+  "description": "aws-health guard: blocks credential, state and secret reads in every session, and limits the aws CLI to strict or deep read-only mode",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Monitor|Read|Grep|Glob|NotebookRead|WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/scripts/aws_guard.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyDataPlaneReads",
+      "Effect": "Deny",
+      "Action": [
+        "s3:GetObject*",
+        "dynamodb:GetItem",
+        "dynamodb:BatchGetItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:PartiQL*",
+        "dynamodb:GetRecords",
+        "kinesis:GetRecords",
+        "ssm:GetParameter*",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:BatchGetSecretValue",
+        "kms:Decrypt",
+        "kms:GenerateDataKey*",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "logs:StartQuery",
+        "logs:GetQueryResults",
+        "logs:StartLiveTail",
+        "logs:GetLogRecord",
+        "athena:GetQueryResults",
+        "athena:GetQueryResultsStream",
+        "states:GetExecutionHistory",
+        "states:DescribeExecution",
+        "bedrock:GetKnowledgeBaseDocuments",
+        "ec2:GetPasswordData",
+        "ec2:GetConsoleOutput",
+        "ec2:GetConsoleScreenshot",
+        "codecommit:GetFile",
+        "codecommit:GetBlob"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyCredentialMinting",
+      "Effect": "Deny",
+      "Action": [
+        "ecr:GetAuthorizationToken",
+        "sts:GetSessionToken",
+        "sts:GetFederationToken",
+        "redshift:GetClusterCredentials*",
+        "lightsail:GetInstanceAccessDetails",
+        "codeartifact:GetAuthorizationToken"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenySecretBearingConfig",
+      "Effect": "Deny",
+      "Action": [
+        "lambda:GetFunction",
+        "lambda:GetLayerVersion",
+        "cloudformation:GetTemplate",
+        "cognito-idp:ListUsers*",
+        "cognito-idp:DescribeUserPoolClient",
+        "appsync:ListApiKeys",
+        "account:GetPrimaryEmail",
+        "account:GetAlternateContact",
+        "account:GetContactInformation"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyBilledReads",
+      "Effect": "Deny",
+      "Action": [
+        "cloudwatch:GetMetricWidgetImage",
+        "access-analyzer:Check*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyBilledMetricReads",
+      "Effect": "Deny",
+      "Action": [
+        "cloudwatch:GetMetricData",
+        "cloudwatch:GetMetricStatistics"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

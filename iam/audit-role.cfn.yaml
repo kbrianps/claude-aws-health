@@ -1,0 +1,174 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  AWSHealthAuditRole for claude-aws-health. SecurityAudit plus ViewOnlyAccess with an explicit deny for
+  data-plane reads, credential minting, secret-bearing configuration and billed calls. Read-only; it cannot change
+  any resource.
+
+Parameters:
+  TrustedPrincipalArn:
+    Type: String
+    Default: ""
+    Description: >-
+      ARN of the IAM user or role allowed to assume this role, in this account or in the management account
+      (for IAM Identity Center use the full ARN of the AWSReservedSSO_* role). Leave empty to trust only GitHub OIDC.
+  GitHubRepo:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    Description: Optional owner/repo whose GitHub Actions may assume this role through OIDC. Leave empty to disable.
+  GitHubEnvironment:
+    Type: String
+    Default: aws-health-audit
+    AllowedPattern: "^[A-Za-z0-9_.-]+$"
+    Description: GitHub environment the workflow must run in. The OIDC sub is pinned to repo:<owner>/<repo>:environment:<this>.
+  AllowCostAndMetrics:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      true allows Cost Explorer reads (US$0.01 per request) and CloudWatch GetMetricData (billed per metric).
+      false denies CloudWatch metric reads.
+
+Rules:
+  NeedsAPrincipal:
+    Assertions:
+      - Assert:
+          Fn::Or:
+            - Fn::Not: [{Fn::Equals: [{Ref: TrustedPrincipalArn}, ""]}]
+            - Fn::Not: [{Fn::Equals: [{Ref: GitHubRepo}, ""]}]
+        AssertDescription: Set TrustedPrincipalArn, GitHubRepo, or both.
+
+Conditions:
+  HasTrustedPrincipal:
+    Fn::Not: [{Fn::Equals: [{Ref: TrustedPrincipalArn}, ""]}]
+  HasGitHub:
+    Fn::Not: [{Fn::Equals: [{Ref: GitHubRepo}, ""]}]
+  CostAndMetrics:
+    Fn::Equals: [{Ref: AllowCostAndMetrics}, "true"]
+
+Resources:
+  AuditRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSHealthAuditRole
+      Description: Read-only audit role for claude-aws-health
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - Fn::Sub: "arn:${AWS::Partition}:iam::aws:policy/SecurityAudit"
+        - Fn::Sub: "arn:${AWS::Partition}:iam::aws:policy/job-function/ViewOnlyAccess"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Fn::If:
+              - HasTrustedPrincipal
+              - Sid: TrustedPrincipal
+                Effect: Allow
+                Principal:
+                  AWS: {Ref: TrustedPrincipalArn}
+                Action: sts:AssumeRole
+              - {Ref: AWS::NoValue}
+          - Fn::If:
+              - HasGitHub
+              - Sid: GitHubOidc
+                Effect: Allow
+                Principal:
+                  Federated:
+                    Fn::Sub: "arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+                Action: sts:AssumeRoleWithWebIdentity
+                Condition:
+                  StringEquals:
+                    "token.actions.githubusercontent.com:aud": sts.amazonaws.com
+                    "token.actions.githubusercontent.com:sub":
+                      Fn::Sub: "repo:${GitHubRepo}:environment:${GitHubEnvironment}"
+              - {Ref: AWS::NoValue}
+      Policies:
+        - PolicyName: AWSHealthAuditDeny
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DenyDataPlaneReads
+                Effect: Deny
+                Action:
+                  - s3:GetObject*
+                  - dynamodb:GetItem
+                  - dynamodb:BatchGetItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:PartiQL*
+                  - dynamodb:GetRecords
+                  - kinesis:GetRecords
+                  - ssm:GetParameter*
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:BatchGetSecretValue
+                  - kms:Decrypt
+                  - kms:GenerateDataKey*
+                  - logs:GetLogEvents
+                  - logs:FilterLogEvents
+                  - logs:StartQuery
+                  - logs:GetQueryResults
+                  - logs:StartLiveTail
+                  - logs:GetLogRecord
+                  - athena:GetQueryResults
+                  - athena:GetQueryResultsStream
+                  - states:GetExecutionHistory
+                  - states:DescribeExecution
+                  - bedrock:GetKnowledgeBaseDocuments
+                  - ec2:GetPasswordData
+                  - ec2:GetConsoleOutput
+                  - ec2:GetConsoleScreenshot
+                  - codecommit:GetFile
+                  - codecommit:GetBlob
+                Resource: "*"
+              - Sid: DenyCredentialMinting
+                Effect: Deny
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - sts:GetSessionToken
+                  - sts:GetFederationToken
+                  - redshift:GetClusterCredentials*
+                  - lightsail:GetInstanceAccessDetails
+                  - codeartifact:GetAuthorizationToken
+                Resource: "*"
+              - Sid: DenySecretBearingConfig
+                Effect: Deny
+                Action:
+                  - lambda:GetFunction
+                  - lambda:GetLayerVersion
+                  - cloudformation:GetTemplate
+                  - cognito-idp:ListUsers*
+                  - cognito-idp:DescribeUserPoolClient
+                  - appsync:ListApiKeys
+                  - account:GetPrimaryEmail
+                  - account:GetAlternateContact
+                  - account:GetContactInformation
+                Resource: "*"
+              - Sid: DenyBilledReads
+                Effect: Deny
+                Action:
+                  - cloudwatch:GetMetricWidgetImage
+                  - access-analyzer:Check*
+                Resource: "*"
+              - Fn::If:
+                  - CostAndMetrics
+                  - {Ref: AWS::NoValue}
+                  - Sid: DenyBilledMetricReads
+                    Effect: Deny
+                    Action:
+                      - cloudwatch:GetMetricData
+                      - cloudwatch:GetMetricStatistics
+                    Resource: "*"
+              - Fn::If:
+                  - CostAndMetrics
+                  - Sid: AllowCostAndMetrics
+                    Effect: Allow
+                    Action:
+                      - ce:Get*
+                      - cloudwatch:GetMetricData
+                    Resource: "*"
+                  - {Ref: AWS::NoValue}
+
+Outputs:
+  RoleArn:
+    Description: Put this in an AWS CLI profile (role_arn) and run awshealth collect --profile <that profile>.
+    Value:
+      Fn::GetAtt: [AuditRole, Arn]
