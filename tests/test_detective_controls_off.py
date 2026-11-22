@@ -52,7 +52,7 @@ def test_region_with_most_workloads_is_high_and_others_medium():
 
 def test_security_hub_invalid_access_is_off_but_denied_is_unknown():
     snap = base()
-    snap.put(SECURITY_HUB, "us-east-1", "error", error="InvalidAccessException")
+    snap.put(SECURITY_HUB, "us-east-1", "unsupported", error="InvalidAccessException")
     snap.put(SECURITY_HUB, "sa-east-1", "denied", error="AccessDeniedException")
     [f] = run_one("detective-controls-off", snap)
     assert f.region == "us-east-1"

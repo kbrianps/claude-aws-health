@@ -48,7 +48,7 @@ def classify_code(code: str, regional: bool) -> str:
         return "denied"
     if code.startswith(("Throttling", "TooManyRequests")) or code == "RequestLimitExceeded":
         return "throttled"
-    if code in ("OptInRequired", "SubscriptionRequiredException", "InvalidAction"):
+    if code in ("OptInRequired", "SubscriptionRequiredException", "InvalidAction", "InvalidAccessException"):
         return "unsupported"
     if regional and code.startswith("UnrecognizedClient"):
         return "unsupported"

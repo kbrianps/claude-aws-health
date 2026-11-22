@@ -32,11 +32,17 @@ def coverage_status(spec: CheckSpec, snap: Snapshot) -> tuple[str, str]:
             missing.append(c.key)
         elif statuses <= {"denied", "missing", "unsupported"} and "denied" in statuses:
             denied.append(c.key)
-    if denied:
-        return "no_access", "denied: " + ", ".join(denied)
-    if missing and len(missing) == len(spec.requires):
+    unavailable = len(missing) + len(denied)
+    if unavailable == len(spec.requires):
+        if denied:
+            return "no_access", "denied: " + ", ".join(denied)
         return "not_collected", "missing: " + ", ".join(missing)
-    return "ran", ("partial, missing: " + ", ".join(missing)) if missing else ""
+    parts = []
+    if denied:
+        parts.append("denied: " + ", ".join(denied))
+    if missing:
+        parts.append("missing: " + ", ".join(missing))
+    return "ran", ("partial, " + "; ".join(parts)) if parts else ""
 
 
 def run_checks(snap: Snapshot, ctx: Context | None = None, only: list[str] | None = None) -> list[CheckResult]:
@@ -59,5 +65,6 @@ def run_checks(snap: Snapshot, ctx: Context | None = None, only: list[str] | Non
         for f in found:
             if f.check_id != cid:
                 raise ValueError(f"check {cid} emitted a finding with check_id {f.check_id}")
-        results.append(CheckResult(cid, "finding" if found else "ok", found, detail))
+        status = "finding" if found else ("partial" if "denied" in detail else "ok")
+        results.append(CheckResult(cid, status, found, detail))
     return results

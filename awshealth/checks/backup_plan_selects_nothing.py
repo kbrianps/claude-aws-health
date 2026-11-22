@@ -4,6 +4,7 @@ from ..calls_security import (
     BACKUP_PLAN,
     BACKUP_PLANS,
     BACKUP_SELECTION,
+    BACKUP_SELECTIONS,
     BACKUP_VAULTS,
     TAGGED_RESOURCES,
     backup_supported,
@@ -28,7 +29,7 @@ def _is_database(arn: str) -> bool:
     severity="medium",
     title={"en": "Backup plan selection matches no resource",
            "pt-BR": "Seleção do plano de backup não pega nenhum recurso"},
-    requires=[BACKUP_PLANS, BACKUP_PLAN, BACKUP_SELECTION, BACKUP_VAULTS, TAGGED_RESOURCES],
+    requires=[BACKUP_PLANS, BACKUP_PLAN, BACKUP_SELECTIONS, BACKUP_SELECTION, BACKUP_VAULTS, TAGGED_RESOURCES],
     catalog_ids=["backup-resources-not-covered", "backup-failed-jobs"],
 )
 def run(snap, ctx):

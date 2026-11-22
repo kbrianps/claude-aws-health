@@ -6,8 +6,8 @@ from pathlib import Path
 
 from .registry import load_checks
 
-STATUS_ORDER = ("finding", "error", "no_access", "not_collected", "ok")
-COVERAGE_STATUSES = ("ok", "finding", "no_access", "not_collected", "error", "agent")
+STATUS_ORDER = ("finding", "error", "no_access", "partial", "not_collected", "ok")
+COVERAGE_STATUSES = ("ok", "finding", "partial", "no_access", "not_collected", "error", "agent")
 
 
 def load_catalog() -> list[dict]:

@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from ..calls_security import ACCESS_KEYS, AUTH_DETAILS, KEY_LAST_USED, days_since, iam_admins, is_break_glass
+from ..calls_security import (
+    ACCESS_KEYS,
+    AUTH_DETAILS,
+    KEY_LAST_USED,
+    USERS,
+    days_since,
+    iam_admins,
+    is_break_glass,
+)
 from ..model import Claim, Finding
 from ..registry import check
 
@@ -13,7 +21,7 @@ CHECK_ID = "iam-admin-user-static-key"
     severity="high",
     title={"en": "Administrator IAM user with an active access key",
            "pt-BR": "Usuário IAM administrador com chave de acesso ativa"},
-    requires=[AUTH_DETAILS, ACCESS_KEYS, KEY_LAST_USED],
+    requires=[AUTH_DETAILS, USERS, ACCESS_KEYS, KEY_LAST_USED],
     catalog_ids=["iam-access-key-age", "iam-access-key-unused"],
 )
 def run(snap, ctx):

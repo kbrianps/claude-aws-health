@@ -107,7 +107,7 @@ ul.plain{margin:0;padding-left:18px}ul.plain li{overflow-wrap:anywhere}
 margin-bottom:8px}
 .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--info)}
 .st-ok{background:var(--ok)}.st-finding{background:var(--high)}.st-no_access{background:var(--critical)}
-.st-not_collected{background:var(--medium)}.st-error{background:var(--critical)}.st-agent{background:var(--info)}
+.st-not_collected{background:var(--medium)}.st-partial{background:var(--medium)}.st-error{background:var(--critical)}.st-agent{background:var(--info)}
 details.group{margin-top:8px}details.group>summary{cursor:pointer;font-size:14px;padding:4px 0}
 footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)}
 footer p{margin:4px 0}
@@ -128,11 +128,6 @@ var d=new Date(el.getAttribute('datetime'));if(isNaN(d))return;
 el.title=el.textContent;
 var o=el.dataset.date?{dateStyle:'medium'}:{dateStyle:'medium',timeStyle:'short'};
 try{el.textContent=d.toLocaleString(T.lang,o);}catch(e){}
-});
-document.querySelectorAll('[data-rel]').forEach(function(el){
-var d=new Date(el.getAttribute('data-rel'));if(isNaN(d))return;
-var n=Math.floor((d-new Date())/86400000);
-el.textContent=n===0?T.today:(n>0?fmt(T.in_days,n):fmt(T.days_ago,-n));
 });
 document.querySelectorAll('button.copy').forEach(function(b){
 b.addEventListener('click',function(){

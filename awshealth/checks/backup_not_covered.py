@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from ..calls_security import (
+    BACKUP_PLANS,
     BACKUP_SELECTION,
+    BACKUP_SELECTIONS,
     DB_INSTANCES,
     DYNAMO_PITR,
     DYNAMO_TABLES,
@@ -44,7 +46,8 @@ def _candidates(snap, region, account):
     category="resilience",
     severity="medium",
     title={"en": "Stateful resource with no backup", "pt-BR": "Recurso com dados sem backup"},
-    requires=[PROTECTED, BACKUP_SELECTION, TAGGED_RESOURCES, DB_INSTANCES, DYNAMO_TABLES, DYNAMO_PITR, EFS],
+    requires=[PROTECTED, BACKUP_PLANS, BACKUP_SELECTIONS, BACKUP_SELECTION, TAGGED_RESOURCES, DB_INSTANCES,
+              DYNAMO_TABLES, DYNAMO_PITR, EFS],
     catalog_ids=["backup-resources-not-covered", "datastore-deletion-protection-pitr-off"],
 )
 def run(snap, ctx):
