@@ -1,0 +1,50 @@
+{
+ "items": [
+  {
+   "recommendationId": "MTExMTIyMjIzMzMzXzEwMDAwMDAx",
+   "accountId": "111122223333",
+   "region": "us-east-1",
+   "resourceId": "i-0123456789abcdef0",
+   "resourceArn": "arn:aws:ec2:us-east-1:111122223333:instance/i-0123456789abcdef0",
+   "currentResourceType": "Ec2Instance",
+   "recommendedResourceType": "Ec2Instance",
+   "estimatedMonthlySavings": 1250.5,
+   "estimatedSavingsPercentage": 48.0,
+   "estimatedMonthlyCost": 2600.0,
+   "currencyCode": "USD",
+   "implementationEffort": "Medium",
+   "restartNeeded": true,
+   "actionType": "Rightsize",
+   "rollbackPossible": true,
+   "currentResourceSummary": "m5.4xlarge",
+   "recommendedResourceSummary": "m7g.2xlarge",
+   "lastRefreshTimestamp": "2026-01-14T00:00:00Z",
+   "recommendationLookbackPeriodInDays": 14,
+   "source": "ComputeOptimizer",
+   "tags": []
+  },
+  {
+   "recommendationId": "MTExMTIyMjIzMzMzXzEwMDAwMDAy",
+   "accountId": "111122223333",
+   "region": "us-east-1",
+   "resourceId": "vol-0123456789abcdef0",
+   "resourceArn": "arn:aws:ec2:us-east-1:111122223333:volume/vol-0123456789abcdef0",
+   "currentResourceType": "EbsVolume",
+   "estimatedMonthlySavings": 150,
+   "implementationEffort": "VeryLow",
+   "restartNeeded": false,
+   "actionType": "Delete"
+  },
+  {
+   "recommendationId": "MTExMTIyMjIzMzMzXzEwMDAwMDAz; rm -rf /",
+   "region": "us-east-1",
+   "resourceId": "fn-example",
+   "currentResourceType": "LambdaFunction",
+   "estimatedMonthlySavings": 3.2,
+   "implementationEffort": "Low",
+   "restartNeeded": false,
+   "actionType": "Rightsize"
+  }
+ ],
+ "nextToken": null
+}

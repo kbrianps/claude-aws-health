@@ -1,0 +1,46 @@
+[
+ {
+  "message": "S3 Bucket example-logs has public access.",
+  "metadata": {"event_code": "s3_bucket_public_access", "product": {"name": "Prowler", "vendor_name": "Prowler", "version": "5.0.0"}, "version": "1.3.0"},
+  "severity_id": 5,
+  "severity": "Critical",
+  "status": "New",
+  "status_code": "FAIL",
+  "status_detail": "S3 Bucket example-logs has public access.",
+  "status_id": 1,
+  "unmapped": {"categories": ["internet-exposed"], "compliance": {}},
+  "activity_name": "Create",
+  "activity_id": 1,
+  "finding_info": {"created_time": 1736942400, "desc": "Ensure there are no S3 buckets open to Everyone or Any AWS user.", "title": "Ensure there are no S3 buckets open to Everyone or Any AWS user.", "uid": "prowler-aws-s3_bucket_public_access-111122223333-us-east-1-example-logs"},
+  "resources": [{"cloud_partition": "aws", "region": "us-east-1", "data": {}, "group": {"name": "s3"}, "labels": [], "name": "example-logs", "type": "AwsS3Bucket", "uid": "arn:aws:s3:::example-logs"}],
+  "category_name": "Findings",
+  "category_uid": 2,
+  "class_name": "Detection Finding",
+  "class_uid": 2004,
+  "cloud": {"account": {"name": "", "type": "AWS Account", "type_id": 10, "uid": "111122223333"}, "provider": "aws", "region": "us-east-1"},
+  "remediation": {"desc": "Block public access at the bucket and account level.", "references": ["https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html"]},
+  "risk_details": "Anyone on the internet can list and read the objects in the bucket.",
+  "time": 1736942400
+ },
+ {
+  "metadata": {"event_code": "backup_plans_exist", "product": {"name": "Prowler"}, "version": "1.3.0"},
+  "severity": "Low",
+  "status_code": "FAIL",
+  "status_detail": "No AWS Backup plan exists.",
+  "unmapped": {"categories": ["resilience"]},
+  "finding_info": {"title": "Ensure that there is at least one AWS Backup plan", "uid": "prowler-aws-backup_plans_exist-111122223333-us-east-1"},
+  "resources": [{"region": "us-east-1", "group": {"name": "backup"}, "name": "111122223333", "uid": "arn:aws:backup:us-east-1:111122223333:backup-plan"}],
+  "cloud": {"account": {"uid": "111122223333"}, "provider": "aws", "region": "us-east-1"},
+  "remediation": {"desc": "Create a backup plan."},
+  "risk_details": "Without a backup plan, data loss cannot be recovered."
+ },
+ {
+  "metadata": {"event_code": "iam_root_mfa_enabled", "product": {"name": "Prowler"}},
+  "severity": "Critical",
+  "status_code": "PASS",
+  "status_detail": "Root account has MFA enabled.",
+  "finding_info": {"title": "Ensure MFA is enabled for the root account", "uid": "prowler-aws-iam_root_mfa_enabled-111122223333"},
+  "resources": [{"region": "us-east-1", "group": {"name": "iam"}, "uid": "arn:aws:iam::111122223333:root"}],
+  "cloud": {"account": {"uid": "111122223333"}, "region": "us-east-1"}
+ }
+]
