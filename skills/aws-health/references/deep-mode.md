@@ -65,7 +65,7 @@ Write observations to `<run>/deep/observations.jsonl`:
 {"id": "vpc-nat-gateway-idle", "resource": "nat-0abc", "region": "us-east-1", "severity": "low", "what": "...", "evidence": "aws ec2 describe-nat-gateways ... -> State=available, no route table points at it", "verify": ["aws ec2 describe-route-tables --region us-east-1 --query ... --output text"], "monthly_usd": null}
 ```
 
-Observations are not deterministic findings. In the summary, label them as found in deep mode, and give the verify command for each. Never write them into `findings.json`.
+Observations are not deterministic findings. In the summary, label them as found in deep mode, and give the verify command for each. Never write them into `findings.json`. They are not merged into `report.html` yet, so the two `.jsonl` files and your chat summary are the only places they appear; tell the user that.
 
 ## Rate limits and billed calls
 
@@ -79,4 +79,4 @@ Observations are not deterministic findings. In the summary, label them as found
 
 ## Calls the guard refuses on purpose
 
-Commands that return environment variables, user data or connection passwords (for example `lambda list-functions`, `ecs describe-task-definition`, `ec2 describe-launch-template-versions`, `glue get-connections`) need a `--query` that names only safe fields, such as `Functions[].{name: FunctionName, runtime: Runtime}`. Secret reads (`get-secret-value`, `ssm get-parameter*`), object and log content, and credential minting (`get-session-token`, `ecr get-login-password`, `eks get-token`) are blocked in every mode.
+Commands that return environment variables, user data or connection passwords (for example `lambda list-functions`, `ecs describe-task-definition`, `ec2 describe-launch-template-versions`, `glue get-connections`) need a `--query` that names only safe fields, such as `Functions[].{name: FunctionName, runtime: Runtime}`, with no `"quoted"` identifiers, backslashes or `$`. Write values out literally: `$VAR`, `$(...)` and backticks are rejected in every `aws` argument, so JMESPath string literals go in single quotes (`[?State.Name=='running']`), never backticks. Use full option names; abbreviations such as `--prof` or `--deb` are blocked. Secret reads (`get-secret-value`, `ssm get-parameter*`), object and log content, and credential minting (`get-session-token`, `ecr get-login-password`, `eks get-token`) are blocked in every mode.

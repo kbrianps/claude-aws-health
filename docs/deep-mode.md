@@ -10,7 +10,7 @@ Quick mode covers what the deterministic checks automate. Deep mode lets Claude 
 
 ## Turn it on
 
-The guard reads two variables from Claude Code's own environment, so set them before starting Claude Code. Setting them inside a Bash command does nothing.
+The guard reads two variables from Claude Code's own environment, so set them before starting Claude Code. Setting them inside a Bash command does nothing. Without `AWSHEALTH_GUARD` the guard does nothing at all, so deep mode must never run in a session started without it.
 
 ```bash
 AWSHEALTH_GUARD=deep AWSHEALTH_PROFILE=aws-health-audit claude
@@ -31,16 +31,20 @@ Then ask for a deep audit. Claude confirms the account with `aws sts get-caller-
 | `awshealth check`, `render`, `import`, `verify`, `catalog` | yes | yes |
 | `awshealth collect` | yes, profile must be `AWSHEALTH_PROFILE` | same |
 | `aws sts get-caller-identity`, `aws --version`, `aws help` | yes | yes |
+| bare `aws` with no service and operation, `aws` through `xargs` or `parallel` | no | no |
 | `aws <service> describe-*`, `list-*`, `get-*`, `lookup-*`, `search-*`, `batch-get-*`, `aws s3 ls` | no | yes, except the operations below |
 | secret reads (`get-secret-value`, `ssm get-parameter*`, `--with-decryption`, `--include-values`) | no | no |
 | data-plane reads (`s3 cp`, `get-object`, `dynamodb scan/query/get-item`, log events, query results) | no | no |
 | credential minting (`get-session-token`, `assume-role`, `ecr get-login-password`, `eks get-token`, `configure export-credentials`) | no | no |
-| calls that return environment variables or user data without a safe `--query` (`lambda list-functions`, `ecs describe-task-definition`, launch templates, Glue connections) | no | only with a `--query` that names safe fields |
-| `--debug`, `--endpoint-url`, `--cli-input-json/yaml`, `--no-verify-ssl`, `--ca-bundle` | no | no |
+| calls that return environment variables, user data, headers or command output without a safe `--query` (`lambda list-functions`, `ecs describe-task-definition`, `ecs describe-tasks`, `batch describe-jobs`, `codebuild batch-get-builds`, launch templates, spot requests, Glue connections, `cloudfront list-distributions`) | no | only with a `--query` that names safe fields, with no `"quoted"` identifiers, backslashes or `$` |
+| `--debug`, `--endpoint-url`, `--cli-input-json/yaml`, `--no-verify-ssl`, `--ca-bundle`, and any abbreviation of them or of `--profile` (`--deb`, `--endpoint`, `--prof`) | no | no |
+| `$VAR`, `$(...)` or backticks in `aws` or `awshealth` arguments | no | no |
 | any `--profile` or `AWS_PROFILE` other than `AWSHEALTH_PROFILE` | no | no |
-| WebFetch, Monitor WebSocket, `curl`, `wget`, `nc` | no while `AWSHEALTH_GUARD` is set | no |
+| WebFetch, Monitor WebSocket, `curl`, `wget`, `nc`, `socat`, `ssh`, `scp`, `sftp`, `rsync`, `ftp`, `telnet`, `dig`, `nslookup`, `host`, `/dev/tcp`, `git push/pull/fetch/clone/remote`, network libraries in inline Python or Node scripts | no | no |
 
-In every mode, with or without the variables, the guard blocks reads of `~/.aws`, `.env` files, `*.tfstate*`, `*.tfvars`, SSH and TLS private keys, `/proc/*/environ`, environment dumps (`printenv`, `env`, `set`, `export -p`), instance metadata endpoints and boto3/botocore scripts.
+While `AWSHEALTH_GUARD` is set, in both strict and deep mode, the guard also blocks reading or writing `~/.aws` (in any letter case), `.env` files, `*.tfstate*`, `*.tfvars`, SSH and TLS private keys and `/proc/*/environ`, through Bash and through the Read, Grep, Glob, Write, Edit, MultiEdit and NotebookEdit tools. It blocks environment dumps (`printenv` and `env` with options or without arguments, `set`, `export -p`, `${!PREFIX*}`, awk `ENVIRON`, `os.environ` or `process.env` in inline scripts), instance metadata endpoints, boto3/botocore scripts, and command names built from variables, globs, braces or `$'...'` quoting. Without `AWSHEALTH_GUARD` none of this applies: the hook exits at once and every call goes through.
+
+In a JMESPath filter, write string literals as raw strings in single quotes, for example `--query "Reservations[].Instances[?State.Name=='running'].InstanceId"`. Backticks are rejected in every `aws` argument.
 
 Without `AWSHEALTH_PROFILE`, no `--profile` flag is accepted at all, and commands use whatever the default credentials are. Set it so every command is pinned to the audit role.
 
@@ -51,8 +55,8 @@ Deep mode writes two files next to the quick-mode results:
 - `<run>/deep/coverage.jsonl`: one line per catalog entry with `checked_ok`, `finding`, `not_applicable`, `no_access` or `already_covered`.
 - `<run>/deep/observations.jsonl`: what it found, each with the command that shows it.
 
-Observations are labeled as deep-mode results in the summary. They are not deterministic findings and are not written to `findings.json`.
+Observations are labeled as deep-mode results in the chat summary. They are not deterministic findings, are not written to `findings.json`, and are not merged into `report.html` yet: the two `.jsonl` files and the summary are where they live.
 
 ## Turn it off
 
-Start Claude Code without the variables, or remove them from the settings `env` block. The guard falls back to strict mode. Disabling the plugin removes the guard completely.
+Restart Claude Code with `AWSHEALTH_GUARD=strict` to go back to quick mode with the guard on. Starting Claude Code without `AWSHEALTH_GUARD`, or removing it from the settings `env` block, turns the guard off completely: it does not fall back to strict mode, it does nothing. Disabling the plugin also removes it.

@@ -35,11 +35,11 @@ claude plugin validate .
 
 ## Guard invariants
 
-`scripts/aws_guard.py` runs on every Bash, Monitor, Read, Grep, Glob, NotebookRead and WebFetch call in any session where the plugin is enabled. It does nothing unless `AWSHEALTH_GUARD` is set in Claude Code's environment, so the plugin never blocks unrelated work.
+`scripts/aws_guard.py` runs on every Bash, Monitor, Read, Grep, Glob, NotebookRead, WebFetch, Write, Edit, MultiEdit and NotebookEdit call in any session where the plugin is enabled. It does nothing unless `AWSHEALTH_GUARD` is set in Claude Code's environment, so the plugin never blocks unrelated work; docs must never say it protects a session started without it.
 
 - It blocks with exit code 2 and a reason on stderr. Any other exit code lets the call through, so every error path must end in exit 2. Keep the top-level `except BaseException` that fails closed.
 - It must stay fast and dependency-free: `python3 -I`, standard library only, no network, no file reads.
-- Strict mode (`AWSHEALTH_GUARD=strict`, and any unknown value) allows no direct `aws` call except `aws sts get-caller-identity`, `aws --version` and `aws help`. Deep mode allows read-only verbs only.
+- Strict mode (`AWSHEALTH_GUARD=strict`, and any unknown value) allows no direct `aws` call except `aws sts get-caller-identity`, `aws --version` and `aws help`. Deep mode allows read-only verbs only. Bare `aws`, abbreviated options, and `$` or backticks in `aws` arguments are blocked in both.
 - Every change to the guard comes with rows in `tests/test_guard.py`, both a blocked case and an allowed case that shows the change does not break normal work.
 
 ## Plugin constraints

@@ -11,11 +11,13 @@ One JSON object per line:
 | `severity` | for `downgraded` | `critical`, `high`, `medium`, `low` or `info`; must be lower than the current severity; never higher |
 | `reason` | yes | one or two plain sentences: what was checked and what it showed |
 | `evidence` | for `killed` | a string or a list of strings pointing at the data: `snapshot:<call_key>@<region>:<resource id> <field>=<value>` or a file and a value |
-| `question` | for `question` | `{"en": "...", "pt-BR": "..."}`, a question the owner can answer with one decision |
+| `question` | for `question` | `{"en": "...", "pt-BR": "..."}`, both keys required and non-empty, a question the owner can answer with one decision |
 
 Rules:
 
 - A `downgraded` line must change the severity; if it stays the same, use `confirmed`.
+- A `question` line always carries both `question.en` and `question.pt-BR`. Never write one language only.
+- Intentional standby (DR, replica, standby, break-glass) and tag or description text alone are a `question`, never a `killed`. Ask, do not kill. See [skeptic-protocol.md](skeptic-protocol.md).
 - Several lines for the same uid apply in order; each severity must be lower than the one before.
 - Never put secret values in `reason` or `evidence`.
 - The pt-BR text uses correct accents, plain words and no em dashes.

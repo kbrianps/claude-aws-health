@@ -3,7 +3,7 @@
 <p align="center">
   <b>Find the AWS problems that turn into bills, outages and incidents before they do.</b><br>
   Deadlines in dollars, forgotten resources, alarms nobody receives, backups that never run.<br>
-  Every finding comes with evidence, a price and read-only commands to check it yourself.
+  Every finding comes with its evidence, a price when there is one and, for the built-in checks, read-only commands to check it yourself.
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/img/report.png" alt="awshealth report for a fictional account: an EKS deadline worth +US$730/month, a backup plan that never ran because of a typo in a tag key, a dangling DNS record and alarms that notify nobody" width="860">
+  <img src="docs/img/report.png" alt="awshealth report for a fictional account: two EKS clusters that start costing +US$730/month on a date, a certificate about to expire, an admin user with a static key, alarms that notify nobody and a backup plan that never ran because of a typo in a tag key" width="860">
 </p>
 
 ## Why
@@ -27,7 +27,7 @@ It is built to be trusted with a real account:
 
 - **Read-only, enforced three times.** An IAM role with an explicit deny, an exact allowlist of API operations inside the collector, and an optional guard hook for the AI layer.
 - **The AI never holds your credentials.** You run `awshealth collect` yourself. Claude only reads the resulting snapshot, challenges each finding with a skeptic agent and writes the report.
-- **Evidence or it did not happen.** Every finding points at the API data behind it, every dollar figure shows its formula and source, and every finding ships with `aws` CLI commands that re-check it.
+- **Evidence or it did not happen.** Every finding points at the API data behind it, every dollar figure shows its formula and source, and every finding from the built-in checks ships with read-only `aws` CLI commands that re-check it. Findings imported from Prowler or Cost Optimization Hub keep the evidence their tool exported and may come without commands.
 - **Unknown is not "OK".** When a call is denied or throttled, the report says so instead of showing a clean result.
 
 ## What it finds
@@ -48,20 +48,25 @@ Beyond those, a catalog of **282 health checks** across 8 domains, each with det
 ## Try it in 30 seconds, no AWS account needed
 
 ```bash
-uvx --from git+https://github.com/kbrianps/claude-aws-health awshealth demo --out ./awshealth-demo
-open ./awshealth-demo/report.html
+uvx --from git+https://github.com/kbrianps/claude-aws-health awshealth demo   # writes ./awshealth-demo
+xdg-open ./awshealth-demo/report.html                                        # Linux; on macOS use open
 ```
 
-The demo runs the full pipeline on "Acme Cameras", a fictional account with a deadline cliff, a backup plan that never ran, a dangling DNS record, a public bucket, alarms that notify nobody, a prompt-injection attempt hidden in a tag (rendered as inert text) and a skeptic pass that kills a false positive with evidence. Use `--lang pt-BR` for the Portuguese report.
+Or open `awshealth-demo/report.html` in any browser. The demo never touches your runs directory.
+
+The demo runs the full pipeline on "Acme Cameras", a fictional account with a deadline cliff, a backup plan that never ran, a dangling DNS record, a public bucket, alarms that notify nobody, a prompt-injection attempt hidden in a tag (rendered as inert text) and a recorded skeptic pass: one false positive killed with evidence from the snapshot itself, one downgrade, one confirmation and one question for the owner of a stopped forensics host. Use `--lang pt-BR` for the Portuguese report and `--out <dir>` to write somewhere else.
 
 ## Use it on your account
 
-**1. Create the audit role** (once per account). [`iam/audit-role.cfn.yaml`](iam/audit-role.cfn.yaml) creates `AWSHealthAuditRole` with `SecurityAudit` + `ViewOnlyAccess` and an explicit deny on data-plane reads, credential minting, secret-bearing config and billed calls.
+**1. Create the audit role** (once per account). [`iam/audit-role.cfn.yaml`](iam/audit-role.cfn.yaml) creates `AWSHealthAuditRole` with `SecurityAudit` + `ViewOnlyAccess` and an explicit deny on data-plane reads, credential minting, secret-bearing config and billed CloudWatch and Access Analyzer calls. Cost Explorer (`ce:Get*`) is not in the deny: the template grants it, together with CloudWatch metric reads, only when you deploy with `AllowCostAndMetrics=true`.
 
 ```bash
-aws cloudformation deploy --template-file iam/audit-role.cfn.yaml --stack-name aws-health-audit \
-  --capabilities CAPABILITY_NAMED_IAM --parameter-overrides TrustedPrincipalArn=<your-user-or-sso-role-arn>
+aws cloudformation deploy --region us-east-1 --template-file iam/audit-role.cfn.yaml \
+  --stack-name aws-health-audit-role --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides TrustedPrincipalArn=<your-user-or-sso-role-arn>
 ```
+
+More trust options (SSO, a management account, GitHub Actions) are in [`iam/trust-policy-examples.md`](iam/trust-policy-examples.md).
 
 Point a profile at it in `~/.aws/config` (`role_arn` + `source_profile`, or an SSO permission set with the same policies).
 
@@ -74,7 +79,7 @@ awshealth check
 awshealth render --lang en                                       # or --lang pt-BR
 ```
 
-**3. Open the report.** Runs live outside your repositories, in `~/.local/share/awshealth/runs/<timestamp>/` (mode 0700):
+**3. Open the report.** Runs live outside your repositories, in `~/.local/share/awshealth/runs/<timestamp>/` (mode 0700). Set `AWSHEALTH_HOME` to keep them somewhere else (`$AWSHEALTH_HOME/runs/<timestamp>/`); inside the Claude Code plugin they go to `$CLAUDE_PLUGIN_DATA/runs` when `AWSHEALTH_HOME` is not set. `check`, `render` and `verify` use the latest run unless you pass `--run <dir>`, and dates are computed from the time of the collection, so re-rendering an old run never says a deadline passed today.
 
 | File | What it is |
 |---|---|
@@ -100,7 +105,7 @@ awshealth import coh-recommendations.json
 /plugin install aws-health@kbrianps
 ```
 
-Start Claude Code with the guard on, then ask for an audit:
+The guard hook is off unless `AWSHEALTH_GUARD` is set when Claude Code starts. Start it with the guard on, then ask for an audit:
 
 ```bash
 AWSHEALTH_GUARD=strict AWSHEALTH_PROFILE=aws-health-audit claude
@@ -109,7 +114,7 @@ AWSHEALTH_GUARD=strict AWSHEALTH_PROFILE=aws-health-audit claude
 
 The skill walks you through it: you run `awshealth collect` yourself (with the `!` prefix, so the credentials stay with you), Claude runs the checks, sends the high-risk and high-dollar findings to a **skeptic agent** that has no shell and no AWS access and may only confirm, downgrade, kill with evidence or turn a finding into a question for the owner, and then writes the report in your language with the 3-5 actions that matter first.
 
-**Deep mode** (`AWSHEALTH_GUARD=deep`, opt-in) lets Claude also run read-only `aws` commands to cover catalog checks that are not automated yet, split by domain across parallel agents, each followed by a blind skeptic. See [docs/deep-mode.md](docs/deep-mode.md).
+**Deep mode** (`AWSHEALTH_GUARD=deep`, opt-in) lets Claude also run read-only `aws` commands to cover catalog checks that are not automated yet, split by domain across parallel agents, each followed by a blind skeptic. In v0.1 its results stay in `<run>/deep/*.jsonl` and in the chat summary; `report.html` and `coverage.md` show only the deterministic checks and imported findings. See [docs/deep-mode.md](docs/deep-mode.md).
 
 The skill follows the open [Agent Skills](https://agentskills.io) format, so `skills/aws-health` also works in other agents that load skills. The guard hook is Claude Code specific; the IAM role is the boundary everywhere.
 
@@ -117,10 +122,10 @@ The skill follows the open [Agent Skills](https://agentskills.io) format, so `sk
 
 | Layer | What it stops |
 |---|---|
-| IAM role (`iam/`) | Any write, data-plane reads (`s3:GetObject`, `ssm:GetParameter`, `secretsmanager:GetSecretValue`, log events), credential minting (`ecr:GetAuthorizationToken`, `sts:GetSessionToken`), secret-bearing config (`lambda:GetFunction`, `cloudformation:GetTemplate`) and billed calls |
+| IAM role (`iam/`) | Any write, data-plane reads (`s3:GetObject`, `ssm:GetParameter`, `secretsmanager:GetSecretValue`, log events), credential minting (`ecr:GetAuthorizationToken`, `sts:GetSessionToken`), secret-bearing config (`lambda:GetFunction`, `cloudformation:GetTemplate`) and billed reads (`cloudwatch:GetMetricWidgetImage`, `access-analyzer:Check*`, and CloudWatch metric reads unless you allow them). Cost Explorer is never denied, only left ungranted by the template unless `AllowCostAndMetrics=true` |
 | Exact allowlist in the collector | Any API operation not declared by a check, refused before the request is signed. A CI test fails if any check declares a mutating operation |
 | Projection | Each call keeps only the fields its check reads. UserData, environment variables and secrets never reach disk |
-| Guard hook (`AWSHEALTH_GUARD`) | Reading `~/.aws`, `.env`, Terraform state or private keys, dumping the environment, `--debug`, other profiles, boto3 one-liners, WebFetch and `curl` during an audit, and (in strict mode) any direct `aws` call |
+| Guard hook (`AWSHEALTH_GUARD`, off unless set) | Reading `~/.aws`, `.env`, Terraform state or private keys, dumping the environment, `--debug`, other profiles, boto3 one-liners, WebFetch and `curl` during an audit, and (in strict mode) any direct `aws` call |
 | Untrusted text | Tag values, names and descriptions are escaped and treated as data, never as instructions |
 
 Full threat model, including what this does not protect against: [docs/threat-model.md](docs/threat-model.md).
