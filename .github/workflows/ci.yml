@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e '.[dev]'
+      - run: ruff check awshealth tests scripts tools
+      - run: pytest -q
+      - run: awshealth demo --out /tmp/demo-en && awshealth demo --out /tmp/demo-pt --lang pt-BR
+      - name: No real account data in the repo
+        run: |
+          ! git grep -nE '\b[0-9]{12}\b' -- ':!tests' ':!awshealth/data/demo' ':!*.md' | grep -vE '111122223333|444455556666|123456789012|000000000000'
